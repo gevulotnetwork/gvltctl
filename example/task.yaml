@@ -1,0 +1,31 @@
+kind: Task
+version: v0
+metadata:
+  name: 'Task 1'
+  description: 'The first task ever'
+  tags:
+    - first-of-its-kind
+    - tagged
+  labels:
+    - key: 'color'
+      value: 'blue'
+    - key: 'size'
+      value: 'large'
+spec:
+  image: 'ipfs://QmS4ustL54uo81uU8S5PiuVWh67uB1ZWjFaBk6ST3Dor3'
+  command: ['python', 'main.py']
+  args: ['--arg1', 'value1', '--arg2', 'value2']
+  env:
+    - name: 'FOO'
+      value: 'bar'
+  inputContexts:
+    - source: 'ipfs://QmS4ustL54uo81uU8S5PiuVWh67uB1ZWjFaBk6ST3Dor3'
+      target: '/mount/point'
+  outputContexts:
+    - source: '/mount/point'
+      retentionPeriod: 3600
+  resources:
+    cpus: 1000
+    gpus: 4000
+    memory: 1024000
+    time: 3600

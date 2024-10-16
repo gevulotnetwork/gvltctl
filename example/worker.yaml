@@ -1,0 +1,20 @@
+kind: Worker
+version: v0
+metadata:
+  id: 'worker-1'
+  name: 'Worker 1'
+  description: 'The first worker ever'
+  tags:
+    - gpu
+    - cpu
+  labels: 
+    - key: 'location'
+      value: 'us-east'
+    - key: 'region'
+      value: 'us-east-1'
+spec:
+  cpus: 64000 # 64 cores
+  gpus: 4000 # 4 GPUs
+  memory: 34359738368 # 32GB
+  disk: 5497558138880 # 5TB
+

@@ -1,0 +1,18 @@
+kind: Pin
+version: v0
+metadata:
+  name: 'Pin 1'
+  description: 'The first pin ever'
+  tags:
+    - first-of-its-kind
+    - tagged
+  labels: 
+    - key: 'color'
+      value: 'blue'
+    - key: 'size'
+      value: 'large'
+spec:
+  cid: 'bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi'
+  bytes: 12345
+  time: 3600
+  redundancy: 1

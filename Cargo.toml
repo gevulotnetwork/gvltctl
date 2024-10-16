@@ -1,0 +1,28 @@
+[package]
+name = "gvltctl"
+version = "0.1.0"
+edition = "2021"
+authors = ["Gevulot Team"]
+repository = "https://github.com/gevulotnetwork/gvltctl"
+
+[dependencies]
+# TODO: change rev to tag when available
+gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", rev = "4ed43d809261d87dc8356bb0c525731b0d7fc225" }
+
+anyhow = "1"
+bip32 = "0.5.1"
+clap = { version = "4", features = ["env", "cargo"] }
+clap_complete = "4.5.13"
+cosmrs = "0.20"
+env_logger = "0.11.5"
+log = "0.4.22"
+num_cpus = "1.16.0"
+oci-spec = "0.7.0"
+rand_core = "0.6.4"
+serde = "1"
+serde_json = "1"
+serde_yaml = "0.9.34"
+tempdir = "0.3.7"
+thiserror = "1"
+tokio = { version = "1", features = ["full"] }
+toml = "0.8.19"
