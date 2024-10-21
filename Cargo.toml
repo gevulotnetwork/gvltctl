@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Gevulot Team"]
 repository = "https://github.com/gevulotnetwork/gvltctl"
+description = "Gevulot Control CLI"
 
 [dependencies]
 # TODO: change rev to tag when available

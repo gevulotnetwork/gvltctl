@@ -14,7 +14,7 @@ use std::io::{self, Read, Write};
 mod builders;
 mod commands;
 
-use commands::{build::*, pins::*, tasks::*, workers::*, sudo::*};
+use commands::{build::*, pins::*, sudo::*, tasks::*, workers::*};
 
 /// Main entry point for the Gevulot Control CLI application.
 ///
@@ -124,10 +124,7 @@ fn setup_command_line_args() -> Result<Command, Box<dyn std::error::Error>> {
             .action(ArgAction::Set),
     ];
 
-    Ok(Command::new("gvltctl")
-        .version("1.0")
-        .author("Author Name <author@example.com>")
-        .about("Gevulot Control CLI")
+    Ok(clap::command!()
         .subcommand_required(true)
         // Worker subcommand
         .subcommand(
