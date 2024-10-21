@@ -7,7 +7,7 @@ repository = "https://github.com/gevulotnetwork/gvltctl"
 
 [dependencies]
 # TODO: change rev to tag when available
-gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", rev = "4ed43d809261d87dc8356bb0c525731b0d7fc225" }
+gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", rev = "091f9fd806b6b7e04968cede8b14f3f4865c98dc" }
 
 anyhow = "1"
 bip32 = "0.5.1"
