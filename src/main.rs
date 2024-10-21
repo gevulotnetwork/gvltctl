@@ -14,7 +14,7 @@ use std::io::{self, Read, Write};
 mod builders;
 mod commands;
 
-use commands::{build::*, pins::*, tasks::*, workers::*};
+use commands::{build::*, pins::*, tasks::*, workers::*, sudo::*};
 
 /// Main entry point for the Gevulot Control CLI application.
 ///
@@ -55,6 +55,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(("create", sub_m)) => create_workflow(sub_m).await?,
             Some(("delete", sub_m)) => delete_workflow(sub_m).await?,
             _ => println!("Unknown workflow command"),
+        },
+        Some(("sudo", sub_m)) => match sub_m.subcommand() {
+            Some(("delete-pin", sub_m)) => sudo_delete_pin(sub_m).await?,
+            Some(("delete-worker", sub_m)) => sudo_delete_worker(sub_m).await?,
+            Some(("delete-task", sub_m)) => sudo_delete_task(sub_m).await?,
+            Some(("freeze-account", sub_m)) => sudo_freeze_account(sub_m).await?,
+            _ => println!("Unknown sudo command"),
         },
         Some(("keygen", sub_m)) => generate_key(sub_m).await?,
         Some(("compute-key", sub_m)) => compute_key(sub_m).await?,
@@ -456,6 +463,7 @@ fn setup_command_line_args() -> Result<Command, Box<dyn std::error::Error>> {
                         .value_hint(ValueHint::FilePath),
                 ),
         )
+        .subcommand(commands::sudo::get_command())
         .subcommand(commands::build::get_command()))
 }
 
