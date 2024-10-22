@@ -140,6 +140,7 @@ impl ImageBuilder for SkopeoSyslinuxBuilder {
                 options.init.as_deref(),
                 init_args.as_deref(),
                 &options.output_file,
+                options.rw_root,
                 options.mbr_file.as_deref(),
             )?;
             print(&format!("✅\n"))?;
@@ -713,6 +714,7 @@ impl SkopeoSyslinuxBuilder {
         init: Option<&str>,
         init_args: Option<&str>,
         output_file: &str,
+        rw_root: bool,
         mbr_file: Option<&str>,
     ) -> Result<()> {
         let init = if let Some(init) = init {
@@ -727,6 +729,8 @@ impl SkopeoSyslinuxBuilder {
             "".to_string()
         };
 
+        let root_dev_mode = if rw_root { "rw" } else { "ro" };
+
         // Create SYSLINUX configuration
         let syslinux_cfg = format!(
             r#"DEFAULT linux
@@ -735,9 +739,9 @@ TIMEOUT 50
 
 LABEL linux
     LINUX /bzImage
-    APPEND root=/dev/sda2 rw console=ttyS0{} {}
+    APPEND root=/dev/sda2 {} console=ttyS0{} {}
 "#,
-            init, init_args
+            root_dev_mode, init, init_args
         );
 
         // Write SYSLINUX configuration to file
