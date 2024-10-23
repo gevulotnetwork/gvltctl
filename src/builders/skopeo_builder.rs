@@ -645,7 +645,7 @@ impl SkopeoSyslinuxBuilder {
         };
 
         let init_args = if let Some(init_args) = init_args {
-            format!("-- {}", init_args)
+            format!(" -- {}", init_args)
         } else {
             "".to_string()
         };
@@ -660,7 +660,7 @@ TIMEOUT 50
 
 LABEL linux
     LINUX /bzImage
-    APPEND root=/dev/sda2 {} console=ttyS0{} {}
+    APPEND root=/dev/sda2 {} console=ttyS0{}{}
 "#,
             root_dev_mode, init, init_args
         );
