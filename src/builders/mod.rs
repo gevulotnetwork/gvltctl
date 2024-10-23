@@ -22,6 +22,7 @@ pub struct BuildOptions {
     pub no_default_mounts: bool,
     pub init: Option<String>,
     pub init_args: Option<String>,
+    pub rw_root: bool,
     pub mbr_file: Option<String>,
     pub output_file: String,
     pub force: bool,
@@ -111,6 +112,7 @@ impl std::fmt::Display for BuildOptions {
                 .as_deref()
                 .unwrap_or("None (will use ENTRYPOINT and CMD)")
         )?;
+        writeln!(f, "| Read-only root   | {:<42} |", !self.rw_root)?;
         writeln!(
             f,
             "| MBR File         | {:<42} |",
@@ -161,6 +163,7 @@ impl TryFrom<&clap::ArgMatches> for BuildOptions {
             no_default_mounts: matches.get_flag("no_default_mounts"),
             init: matches.get_one::<String>("init").cloned(),
             init_args: matches.get_one::<String>("init_args").cloned(),
+            rw_root: matches.get_flag("rw_root"),
             mbr_file: matches.get_one::<String>("mbr_file").cloned(),
             output_file: matches
                 .get_one::<String>("output_file")
