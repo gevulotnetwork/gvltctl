@@ -142,6 +142,17 @@ pub fn get_command() -> clap::Command {
                 .required(false),
         )
         .arg(
+            Arg::new("rw_root")
+                .long("rw-root")
+                .help("Mount root filesystem as read-write. Only for debug purposes.")
+                .long_help("Mount root filesystem as read-write. Only for debug purposes.\n\
+                            Root filesystem will be mounted as read-only by default.\n\
+                            Note: Gevulot worker node will execute your disk image in read-only mode.\n\
+                            This means that images with this flag enabled cannot be executed on the network.")
+                .required(false)
+                .action(clap::ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new("mbr_file")
                 .long("mbr-file")
                 .value_name("FILE")
