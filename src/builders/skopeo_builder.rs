@@ -72,6 +72,7 @@ impl ImageBuilder for SkopeoSyslinuxBuilder {
             print(&format!("✅\n"))?;
 
             let mut container_rt_config = MiaRuntimeConfig::default();
+            let mut kernel_modules = options.kernel_modules.clone();
 
             if let Some(container_source) = &options.container_source {
                 print(&format!("Installing rootfs from container... "))?;
@@ -108,6 +109,7 @@ impl ImageBuilder for SkopeoSyslinuxBuilder {
                         .as_ref()
                         .context("Kernel URL is required")?,
                     options.nvidia_drivers,
+                    &mut kernel_modules,
                 )?;
                 print(&format!("✅\n"))?;
             }
@@ -117,7 +119,7 @@ impl ImageBuilder for SkopeoSyslinuxBuilder {
                 print(&format!("Installing MIA (Minimal Init Application)... "))?;
                 Self::install_mia(
                     &container_rt_config,
-                    &options.kernel_modules,
+                    &kernel_modules,
                     &options.mounts,
                     !options.no_gevulot_rt_config,
                     !options.no_default_mounts,
@@ -459,7 +461,12 @@ impl SkopeoSyslinuxBuilder {
     }
 
     // Install the Linux kernel
-    fn install_kernel(version: &str, kernel_url: &str, nvidia_drivers: bool) -> Result<()> {
+    fn install_kernel(
+        version: &str,
+        kernel_url: &str,
+        nvidia_drivers: bool,
+        kernel_modules: &mut Vec<String>,
+    ) -> Result<()> {
         let home_dir = std::env::var("HOME").context("Failed to get HOME environment variable")?;
         let kernel_dir = format!("{}/.linux-builds/{}", home_dir, version);
         let bzimage_path = format!("{}/arch/x86/boot/bzImage", kernel_dir);
@@ -524,6 +531,10 @@ impl SkopeoSyslinuxBuilder {
             let vm_root_path = env::temp_dir().join("mnt");
             nvidia::install_drivers(kernel_source_dir, vm_root_path)
                 .context("Unable to install NVIDIA drivers")?;
+
+            kernel_modules.push("nvidia".to_string());
+            kernel_modules.push("nvidia_uvm".to_string());
+            // TODO: just hard-coded module names for now
         }
 
         Ok(())
