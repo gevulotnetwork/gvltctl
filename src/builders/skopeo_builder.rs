@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use log::debug;
+use mia_rt_config::MiaRuntimeConfig;
 use oci_spec::image::{ImageConfiguration, ImageManifest};
 use std::io::{self, BufRead, BufReader, Write};
 use std::{env, fs, path::Path, process::Command};
@@ -8,21 +9,6 @@ use tempdir::TempDir;
 use crate::builders::{BuildOptions, ImageBuilder};
 
 use super::nvidia;
-
-/// `mia` binary.
-///
-/// Bytes are included directly here during compilation.
-// TODO: probably this is not the best idea, because now user can't use different
-// version of mia without recompiling the gvltctl.
-const THIN_INIT_BIN: &[u8] = include_bytes!(concat!(
-    env!("OUT_DIR"),
-    "/x86_64-unknown-linux-gnu/release/mia"
-));
-
-/// `kmod` statically linked executable and compiled for x86_64.
-///
-/// It is used by MIA to operate on kernel modules.
-const KMOD_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/builders/data/kmod");
 
 pub struct SkopeoSyslinuxBuilder {}
 
@@ -85,11 +71,12 @@ impl ImageBuilder for SkopeoSyslinuxBuilder {
             Self::mount_filesystems(&options.output_file)?;
             print(&format!("✅\n"))?;
 
-            let mut init_args = options.init_args.clone();
+            let mut container_rt_config = MiaRuntimeConfig::default();
+            let mut kernel_modules = options.kernel_modules.clone();
 
             if let Some(container_source) = &options.container_source {
                 print(&format!("Installing rootfs from container... "))?;
-                Self::install_rootfs_from_container(container_source, &mut init_args)?;
+                Self::install_rootfs_from_container(container_source, &mut container_rt_config)?;
                 print(&format!("✅\n"))?;
             } else if let Some(rootfs_dir) = &options.rootfs_dir {
                 print(&format!("Installing rootfs from directory... "))?;
@@ -99,7 +86,10 @@ impl ImageBuilder for SkopeoSyslinuxBuilder {
                 print(&format!(
                     "Building and installing rootfs from Containerfile... "
                 ))?;
-                Self::build_and_install_rootfs_from_containerfile(containerfile, &mut init_args)?;
+                Self::build_and_install_rootfs_from_containerfile(
+                    containerfile,
+                    &mut container_rt_config,
+                )?;
                 print(&format!("✅\n"))?;
             }
 
@@ -119,6 +109,7 @@ impl ImageBuilder for SkopeoSyslinuxBuilder {
                         .as_ref()
                         .context("Kernel URL is required")?,
                     options.nvidia_drivers,
+                    &mut kernel_modules,
                 )?;
                 print(&format!("✅\n"))?;
             }
@@ -127,18 +118,21 @@ impl ImageBuilder for SkopeoSyslinuxBuilder {
             if options.init.is_none() {
                 print(&format!("Installing MIA (Minimal Init Application)... "))?;
                 Self::install_mia(
-                    &mut init_args,
-                    &options.kernel_modules,
+                    &container_rt_config,
+                    &kernel_modules,
                     &options.mounts,
-                    options.no_default_mounts,
+                    !options.no_gevulot_rt_config,
+                    !options.no_default_mounts,
                 )?;
                 print(&format!("✅\n"))?;
+            } else {
+                print("WARNING: Using custom init system is considered unstable for now!")?;
             }
 
             print(&format!("Installing bootloader... "))?;
             Self::install_bootloader(
                 options.init.as_deref(),
-                init_args.as_deref(),
+                options.init_args.as_deref(),
                 &options.output_file,
                 options.rw_root,
                 options.mbr_file.as_deref(),
@@ -303,7 +297,7 @@ impl SkopeoSyslinuxBuilder {
     // Install the root filesystem from a container image
     fn install_rootfs_from_container(
         container_source: &str,
-        init_args: &mut Option<String>,
+        rt_config: &mut MiaRuntimeConfig,
     ) -> Result<()> {
         // This temp dir will be removed on dropping.
         let target_dir = TempDir::new("").context("Failed to create temporary directory")?;
@@ -381,43 +375,38 @@ impl SkopeoSyslinuxBuilder {
         // Ensure all changes are written to disk
         Self::run_command(&["sync"], true).context("Failed to sync filesystem")?;
 
-        // Extract init_args from the container manifest if the user didn't provide it.
-        if init_args.is_none() {
-            *init_args = Some(String::new());
-            let init_args = init_args.as_mut().unwrap();
-            if let Some(exec_params) = config.config() {
-                // Add enviromnental variables
-                if let Some(env_vars) = exec_params.env() {
-                    for var in env_vars {
-                        init_args.push_str(&format!(" --env {}", &var));
-                    }
+        // Extract runtime config from the container manifest.
+        if let Some(exec_params) = config.config() {
+            // Add enviromnental variables
+            if let Some(env_vars) = exec_params.env() {
+                for var in env_vars {
+                    let (key, value) = var
+                        .split_once('=')
+                        .ok_or(anyhow::anyhow!("invalid environment variable"))?;
+                    rt_config.env.push(mia_rt_config::Env {
+                        key: key.to_string(),
+                        value: value.to_string(),
+                    });
                 }
+            }
 
-                if let Some(working_dir) = exec_params.working_dir() {
-                    init_args.push_str(&format!(" --wd {}", working_dir));
-                }
+            rt_config.working_dir = exec_params.working_dir().clone();
 
-                // Try to get the ENTRYPOINT execution params
-                if let Some(entrypoint) = exec_params.entrypoint() {
-                    if !entrypoint.is_empty() {
-                        let entrypoint_str = entrypoint.join(" ");
-                        init_args.push(' ');
-                        init_args.push('"');
-                        init_args.push_str(&entrypoint_str);
-                        init_args.push('"');
-                    }
-                }
-                // Try to get CMD from execution params
-                if let Some(cmd) = exec_params.cmd() {
-                    for arg in cmd {
-                        if !arg.is_empty() {
-                            init_args.push(' ');
-                            init_args.push('"');
-                            init_args.push_str(arg);
-                            init_args.push('"');
-                        }
-                    }
-                }
+            let mut exec_string = Vec::new();
+            // Try to get the ENTRYPOINT execution params
+            if let Some(entrypoint) = exec_params.entrypoint() {
+                exec_string.append(&mut entrypoint.clone());
+            }
+            // Try to get CMD from execution params
+            if let Some(cmd) = exec_params.cmd() {
+                exec_string.append(&mut cmd.clone());
+            }
+
+            if exec_string.is_empty() {
+                // Do nothing, image have no default commands.
+            } else {
+                rt_config.command = Some(exec_string[0].clone());
+                rt_config.args = exec_string[1..].to_vec();
             }
         }
 
@@ -449,7 +438,7 @@ impl SkopeoSyslinuxBuilder {
     // Build and install the root filesystem from a Containerfile
     fn build_and_install_rootfs_from_containerfile(
         containerfile: &str,
-        init_args: &mut Option<String>,
+        rt_config: &mut MiaRuntimeConfig,
     ) -> Result<()> {
         let container_source = "containers-storage:localhost/custom_image:latest";
 
@@ -467,12 +456,17 @@ impl SkopeoSyslinuxBuilder {
         )
         .context("Failed to build container image from Containerfile")?;
 
-        Self::install_rootfs_from_container(container_source, init_args)
+        Self::install_rootfs_from_container(container_source, rt_config)
             .context("Failed to install rootfs from built container")
     }
 
     // Install the Linux kernel
-    fn install_kernel(version: &str, kernel_url: &str, nvidia_drivers: bool) -> Result<()> {
+    fn install_kernel(
+        version: &str,
+        kernel_url: &str,
+        nvidia_drivers: bool,
+        kernel_modules: &mut Vec<String>,
+    ) -> Result<()> {
         let home_dir = std::env::var("HOME").context("Failed to get HOME environment variable")?;
         let kernel_dir = format!("{}/.linux-builds/{}", home_dir, version);
         let bzimage_path = format!("{}/arch/x86/boot/bzImage", kernel_dir);
@@ -537,6 +531,10 @@ impl SkopeoSyslinuxBuilder {
             let vm_root_path = env::temp_dir().join("mnt");
             nvidia::install_drivers(kernel_source_dir, vm_root_path)
                 .context("Unable to install NVIDIA drivers")?;
+
+            kernel_modules.push("nvidia".to_string());
+            kernel_modules.push("nvidia_uvm".to_string());
+            // TODO: just hard-coded module names for now
         }
 
         Ok(())
@@ -560,153 +558,87 @@ impl SkopeoSyslinuxBuilder {
         .context("Failed to copy precompiled kernel")
     }
 
-    fn install_init(basepath: impl AsRef<Path>, name: &str, binary: &[u8]) -> Result<()> {
-        // Install init binary into root directory
-        if basepath.as_ref().has_root() {
-            anyhow::bail!("Failed to install init: absolute basepath was provided");
-        }
-        let init_path = env::temp_dir().join("mnt").join(&basepath).join(name);
+    /// Prepare MIA installation config and run installer.
+    fn install_mia(
+        container_rt_config: &MiaRuntimeConfig,
+        kernel_modules: &Vec<String>,
+        mounts: &Vec<String>,
+        gevulot_rt_config: bool,
+        default_mounts: bool,
+    ) -> Result<()> {
+        let mut mounts = mounts
+            .iter()
+            .map(|m| {
+                let parts: Vec<&str> = m.split(':').collect();
+                let source = parts.first().unwrap().to_string();
+                let target = parts.get(1).unwrap_or(&"").to_string();
+                let fstype = parts.get(2).unwrap_or(&"9p").to_string();
+                let data = parts
+                    .get(3)
+                    .unwrap_or(&"trans=virtio,version=9p2000.L")
+                    .to_string();
+                mia_rt_config::Mount {
+                    source,
+                    target,
+                    fstype: Some(fstype),
+                    flags: None,
+                    data: Some(data),
+                }
+            })
+            .collect::<Vec<_>>();
 
-        // Write init binary to a file
-        let mut child = Command::new("sudo")
-            .args(["tee", init_path.to_str().unwrap()])
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::null())
-            .spawn()
-            .context("Failed to spawn tee command for init installation")?;
-        child
-            .stdin
-            .as_mut()
-            .unwrap()
-            .write_all(binary)
-            .context("Failed to write init binary")?;
-        child.wait().context("Failed to wait for tee command")?;
+        let follow_config = if gevulot_rt_config {
+            mounts.push(mia_rt_config::Mount {
+                source: "gevulot-rt-config".to_string(),
+                target: "/mnt/gevulot-rt-config".to_string(),
+                fstype: Some("9p".to_string()),
+                flags: None,
+                data: Some("trans=virtio,version=9p2000.L".to_string()),
+            });
+            // NOTE: Worker node will mount runtime config file to tag `gevulot-rt-config`.
+            //       This is a convention between VM and node we have now.
+            Some("/mnt/gevulot-rt-config/config.yaml".to_string())
+        } else {
+            None
+        };
 
-        // Give execution permissions for init file
-        Self::run_command(&["chmod", "755", init_path.to_str().unwrap()], true)
-            .context("Failed to set execution permissions for init")?;
-
-        // Create /sbin directory if it doesn't exist
         Self::run_command(
             &[
                 "mkdir",
                 "-p",
-                env::temp_dir().join("mnt").join("sbin").to_str().unwrap(),
-            ],
-            true,
-        )
-        .context("Failed to create /sbin directory")?;
-
-        // Create symlink to allow default init path: /sbin/init
-        Self::run_command(
-            &[
-                "ln",
-                "-s",
-                "-f",
-                Path::new("/").join(&basepath).join(name).to_str().unwrap(),
                 env::temp_dir()
                     .join("mnt")
-                    .join("sbin")
-                    .join("init")
+                    .join("mnt")
+                    .join("gevulot-rt-config")
                     .to_str()
                     .unwrap(),
             ],
             true,
         )
-        .context("Failed to create symlink for init")?;
+        .context("Failed to create gevulot-rt-config directory")?;
 
-        // Ensure all changes are written to disk
-        Self::run_command(&["sync"], true).context("Failed to sync filesystem")?;
+        let rt_config = MiaRuntimeConfig {
+            version: mia_rt_config::VERSION,
+            command: container_rt_config.command.clone(),
+            args: container_rt_config.args.clone(),
+            env: container_rt_config.env.clone(),
+            working_dir: container_rt_config.working_dir.clone(),
+            mounts,
+            default_mounts,
+            kernel_modules: kernel_modules.clone(),
+            bootcmd: vec![],
+            follow_config,
+        };
 
-        Ok(())
-    }
+        let mut install_config = mia_installer::InstallConfig::default();
+        install_config.prefix = env::temp_dir().join("mnt");
 
-    fn install_mia(
-        init_args: &mut Option<String>,
-        kernel_modules: &Vec<String>,
-        mounts: &Vec<String>,
-        no_default_mounts: bool,
-    ) -> Result<()> {
-        // Create directory in /usr/lib for mia
-        let mia_dir = env::temp_dir()
-            .join("mnt")
-            .join("usr")
-            .join("lib")
-            .join("mia");
-        Self::run_command(&["mkdir", "-p", mia_dir.to_str().unwrap()], true)
-            .context("Failed to create mia directory")?;
+        // In case there is an init system installed in the container
+        install_config.overwrite_symlink = true;
 
-        // MIA will use kmod to operate on kernel modules
-        Self::install_kmod(&mia_dir)?;
+        install_config.rt_config = Some(rt_config);
 
-        let mut mounts = mounts.clone();
-        if !no_default_mounts {
-            mounts.insert(0, "proc:/proc:proc:".to_string());
-            // Ensure that /proc exists, otherwise there will be an error at runtime
-            Self::run_command(
-                &[
-                    "mkdir",
-                    "-p",
-                    env::temp_dir().join("mnt").join("proc").to_str().unwrap(),
-                ],
-                true,
-            )
-            .context("Failed to create /proc directory")?;
-        }
-        let modules_args = kernel_modules
-            .iter()
-            .map(|module| format!("--module {}", module))
-            .collect::<Vec<_>>()
-            .join(" ");
-        let mount_args = mounts
-            .iter()
-            .map(|mount| format!("--mount {}", mount))
-            .collect::<Vec<_>>()
-            .join(" ");
-        if !mount_args.is_empty() {
-            *init_args = Some(init_args.as_ref().map_or(mount_args.clone(), |args| {
-                format!("{} {}", mount_args, args)
-            }));
-        }
-        if !modules_args.is_empty() {
-            *init_args = Some(init_args.as_ref().map_or(mount_args.clone(), |args| {
-                format!("{} {}", modules_args, args)
-            }));
-        }
-        Self::install_init("usr/lib/mia", "mia", THIN_INIT_BIN).context("Failed to install MIA")
-    }
-
-    /// Install kmod and its tools.
-    fn install_kmod(mia_dir: &Path) -> Result<()> {
-        if !Path::new(KMOD_FILE).exists() {
-            anyhow::bail!("kmod was not found. Expected: {}", KMOD_FILE);
-        }
-
-        // Install kmod binary
-        Self::run_command(&["cp", KMOD_FILE, mia_dir.to_str().unwrap()], true)
-            .context("Failed to install kmod")?;
-        Self::run_command(
-            &["chmod", "755", mia_dir.join("kmod").to_str().unwrap()],
-            true,
-        )
-        .context("Failed to set kmod mode")?;
-
-        // Install symlinks to kmod
-        let symlinks = ["depmod", "insmod", "lsmod", "modinfo", "modprobe", "rmmod"];
-        for symlink in symlinks {
-            Self::run_command(
-                &[
-                    "ln",
-                    "-s",
-                    "/usr/lib/mia/kmod",
-                    mia_dir.join(symlink).to_str().unwrap(),
-                ],
-                true,
-            )
-            .context(format!("Failed to install {}", symlink))?;
-        }
-
-        Ok(())
+        mia_installer::install(&install_config)
     }
 
     // Install the bootloader (SYSLINUX)
@@ -724,7 +656,7 @@ impl SkopeoSyslinuxBuilder {
         };
 
         let init_args = if let Some(init_args) = init_args {
-            format!("-- {}", init_args)
+            format!(" -- {}", init_args)
         } else {
             "".to_string()
         };
@@ -739,7 +671,7 @@ TIMEOUT 50
 
 LABEL linux
     LINUX /bzImage
-    APPEND root=/dev/sda2 {} console=ttyS0{} {}
+    APPEND root=/dev/sda2 {} console=ttyS0{}{}
 "#,
             root_dev_mode, init, init_args
         );

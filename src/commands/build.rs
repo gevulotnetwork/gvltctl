@@ -116,6 +116,19 @@ pub fn get_command() -> clap::Command {
                 .required(false),
         )
         .arg(
+            Arg::new("no_gevulot_rt_config")
+                .long("no-gevulot-rt-config")
+                .help("[MIA] Don't mount gevulot-rt-config. Only for debug purposes.")
+                .help("[MIA] Don't mount gevulot-rt-config. Only for debug purposes.\n\
+                       No following config will be provided to the VM. Only built-in one will be used.\n\
+                       Note: Gevulot worker will provide runtime config through gevulot-rt-config.\n\
+                       This means that images with this flag enabled cannot be executed on the network.\n\
+                       This option can't be used together with --init or --init-args.")
+                .action(clap::ArgAction::SetTrue)
+                .conflicts_with_all(["init", "init_args"])
+                .required(false),
+        )
+        .arg(
             Arg::new("no_default_mounts")
                 .long("no-default-mounts")
                 .help("[MIA] Don't mount /proc. \
