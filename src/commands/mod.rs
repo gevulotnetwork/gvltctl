@@ -1,3 +1,4 @@
+#[cfg(target_os = "linux")]
 pub mod build;
 pub mod pins;
 pub mod tasks;
