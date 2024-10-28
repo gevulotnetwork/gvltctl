@@ -20,7 +20,6 @@ RUN cargo build --release
 
 # Copy the source code and build script
 COPY src ./src
-COPY build.rs .
 
 # Build the project
 RUN cargo build --release && cp target/release/gvltctl /gvltctl-bin
