@@ -715,7 +715,8 @@ LABEL linux
         let mbr_path = if let Some(mbr_file) = mbr_file {
             mbr_file
         } else {
-            const CANDIDATES: [&str; 2] = [
+            const CANDIDATES: [&str; 3] = [
+                "/usr/share/syslinux/mbr.bin",
                 "/usr/lib/syslinux/mbr/mbr.bin",
                 "/usr/lib/syslinux/bios/mbr.bin",
             ];
