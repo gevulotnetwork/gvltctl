@@ -171,6 +171,7 @@ pub fn get_command() -> clap::Command {
                 .value_name("FILE")
                 .value_hint(ValueHint::FilePath)
                 .help("Path to MBR file. If none provided, following paths will be tried:\n\
+                        - /usr/share/syslinux/mbr.bin\n\
                         - /usr/lib/syslinux/mbr/mbr.bin\n\
                         - /usr/lib/syslinux/bios/mbr.bin")
                 .required(false),
