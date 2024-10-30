@@ -117,6 +117,14 @@ fn setup_command_line_args() -> Result<Command, Box<dyn std::error::Error>> {
             .help("Sets the mnemonic for the Gevulot client")
             .value_hint(ValueHint::Other)
             .action(ArgAction::Set),
+        Arg::new("password")
+            .short('n')
+            .long("password")
+            .value_name("PASSWORD")
+            .env("GEVULOT_PASSWORD")
+            .help("Sets the password for the Gevulot client")
+            .value_hint(ValueHint::Other)
+            .action(ArgAction::Set),
         Arg::new("format")
             .short('F')
             .long("format")
@@ -337,6 +345,7 @@ fn setup_command_line_args() -> Result<Command, Box<dyn std::error::Error>> {
                     Arg::new("password")
                         .long("password")
                         .value_name("PASSWORD")
+                        .env("GEVULOT_PASSWORD")
                         .help("The password to compute the key with")
                         .value_hint(ValueHint::Other),
                 ),
@@ -400,7 +409,7 @@ fn setup_command_line_args() -> Result<Command, Box<dyn std::error::Error>> {
                         .value_hint(ValueHint::FilePath),
                 ),
         )
-        .subcommand(commands::sudo::get_command());
+        .subcommand(commands::sudo::get_command(&chain_args));
 
     #[cfg(target_os = "linux")]
     {

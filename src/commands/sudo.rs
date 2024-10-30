@@ -1,5 +1,5 @@
 use gevulot_rs::proto::gevulot::gevulot::{
-    MsgSudoDeletePin, MsgSudoDeleteWorker, MsgSudoDeleteTask, MsgSudoFreezeAccount,
+    MsgSudoDeletePin, MsgSudoDeleteTask, MsgSudoDeleteWorker, MsgSudoFreezeAccount,
 };
 
 use crate::connect_to_gevulot;
@@ -8,7 +8,7 @@ const OK: &str = "ok";
 
 use clap::{Arg, Command, ValueHint};
 
-pub fn get_command() -> clap::Command {
+pub fn get_command(chain_args: &[Arg]) -> clap::Command {
     Command::new("sudo")
         .about("Perform administrative operations with sudo privileges")
         .subcommand_required(true)
@@ -22,7 +22,8 @@ pub fn get_command() -> clap::Command {
                         .required(true)
                         .index(1)
                         .value_hint(ValueHint::Other),
-                ),
+                )
+                .args(chain_args),
         )
         .subcommand(
             Command::new("delete-worker")
@@ -34,7 +35,8 @@ pub fn get_command() -> clap::Command {
                         .required(true)
                         .index(1)
                         .value_hint(ValueHint::Other),
-                ),
+                )
+                .args(chain_args),
         )
         .subcommand(
             Command::new("delete-task")
@@ -46,7 +48,8 @@ pub fn get_command() -> clap::Command {
                         .required(true)
                         .index(1)
                         .value_hint(ValueHint::Other),
-                ),
+                )
+                .args(chain_args),
         )
         .subcommand(
             Command::new("freeze-account")
@@ -58,10 +61,10 @@ pub fn get_command() -> clap::Command {
                         .required(true)
                         .index(1)
                         .value_hint(ValueHint::Other),
-                ),
+                )
+                .args(chain_args),
         )
 }
-
 
 /// Deletes a pin using sudo privileges.
 ///
