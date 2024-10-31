@@ -588,13 +588,10 @@ impl SkopeoSyslinuxBuilder {
             .collect::<Vec<_>>();
 
         let follow_config = if gevulot_rt_config {
-            mounts.push(mia_rt_config::Mount {
-                source: "gevulot-rt-config".to_string(),
-                target: "/mnt/gevulot-rt-config".to_string(),
-                fstype: Some("9p".to_string()),
-                flags: None,
-                data: Some("trans=virtio,version=9p2000.L".to_string()),
-            });
+            mounts.push(mia_rt_config::Mount::virtio9p(
+                "gevulot-rt-config".to_string(),
+                "/mnt/gevulot-rt-config".to_string(),
+            ));
             // NOTE: Worker node will mount runtime config file to tag `gevulot-rt-config`.
             //       This is a convention between VM and node we have now.
             Some("/mnt/gevulot-rt-config/config.yaml".to_string())
