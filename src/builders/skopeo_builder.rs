@@ -93,6 +93,10 @@ impl ImageBuilder for SkopeoSyslinuxBuilder {
                 print(&format!("✅\n"))?;
             }
 
+            print("Creating workspace directory...")?;
+            Self::create_workspace()?;
+            print("✅\n")?;
+
             if let Some(kernel_path) = &options.kernel_file {
                 if options.nvidia_drivers {
                     print("WARNING: Installing NVIDIA drivers for precompiled kernel is not supported yet!")?;
@@ -458,6 +462,16 @@ impl SkopeoSyslinuxBuilder {
 
         Self::install_rootfs_from_container(container_source, rt_config)
             .context("Failed to install rootfs from built container")
+    }
+
+    /// Create `/workspace` directory in the VM, which will be used as output mountpoint.
+    fn create_workspace() -> Result<()> {
+        let ws_path = env::temp_dir().join("mnt").join("workspace");
+        if !ws_path.exists() {
+            Self::run_command(&["mkdir", "-p", ws_path.to_str().unwrap()], true)
+                .context("Failed to create workspace directory")?;
+        }
+        Ok(())
     }
 
     // Install the Linux kernel
