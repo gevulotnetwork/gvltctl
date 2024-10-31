@@ -468,8 +468,7 @@ impl SkopeoSyslinuxBuilder {
     fn create_workspace() -> Result<()> {
         let ws_path = env::temp_dir().join("mnt").join("workspace");
         if !ws_path.exists() {
-            Self::run_command(&["mkdir", "-p", ws_path.to_str().unwrap()], true)
-                .context("Failed to create workspace directory")?;
+            fs::create_dir_all(&ws_path).context("Failed to create workspace directory")?;
         }
         Ok(())
     }
