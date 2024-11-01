@@ -4,7 +4,7 @@ name: release
 
 on:
   push:
-    tags:
+    tags: # tags must start with v
       - "v[0-9]+.[0-9]+.[0-9]+"
 
 # We need this to be able to create releases.
@@ -28,19 +28,19 @@ jobs:
       - name: Show the version
         run: |
           echo "version is: $VERSION"
-
       - name: Check that tag version and Cargo.toml version are the same
         shell: bash
         run: |
+          VERSION=${VERSION#v} # strip leading v if present only for the Cargo.toml check
           if ! grep -q "version = \"$VERSION\"" Cargo.toml; then
             echo "version does not match Cargo.toml" >&2
             exit 1
           fi
-
       - name: Create GitHub release
+        # env.VERSION is the tag name, which has leading v
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create v$VERSION --draft --title v$VERSION
+        run: gh release create $VERSION --draft --title $VERSION
     outputs:
       version: ${{ env.VERSION }}
       release_name: ${{ env.RELEASE_NAME }}
@@ -76,20 +76,20 @@ jobs:
           rust: stable
           target: x86_64-unknown-linux-gnu
           qemu: i386
-#       - build: stable-aarch64
-#         os: ubuntu-latest
-#         rust: stable
-#         target: aarch64-unknown-linux-gnu
-#         strip: aarch64-linux-gnu-strip
-#         qemu: qemu-aarch64
-#       - build: macos
-#         os: macos-latest
-#         rust: nightly
-#         target: x86_64-apple-darwin
-#       - build: win-msvc
-#         os: windows-latest
-#         rust: nightly
-#         target: x86_64-pc-windows-msvc
+        - build: stable-aarch64
+          os: ubuntu-latest
+          rust: stable
+          target: aarch64-unknown-linux-gnu
+          strip: aarch64-linux-gnu-strip
+          qemu: qemu-aarch64
+        # - build: macos
+        #   os: macos-latest
+        #   rust: nightly
+        #   target: x86_64-apple-darwin
+        # - build: win-msvc
+        #   os: windows-latest
+        #   rust: nightly
+        #   target: x86_64-pc-windows-msvc
 
     steps:
     - name: Checkout repository
