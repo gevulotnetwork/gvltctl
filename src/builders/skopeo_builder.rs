@@ -93,6 +93,10 @@ impl ImageBuilder for SkopeoSyslinuxBuilder {
                 print(&format!("✅\n"))?;
             }
 
+            print("Creating workspace directory...")?;
+            Self::create_workspace()?;
+            print("✅\n")?;
+
             if let Some(kernel_path) = &options.kernel_file {
                 if options.nvidia_drivers {
                     print("WARNING: Installing NVIDIA drivers for precompiled kernel is not supported yet!")?;
@@ -460,6 +464,15 @@ impl SkopeoSyslinuxBuilder {
             .context("Failed to install rootfs from built container")
     }
 
+    /// Create `/workspace` directory in the VM, which will be used as output mountpoint.
+    fn create_workspace() -> Result<()> {
+        let ws_path = env::temp_dir().join("mnt").join("workspace");
+        if !ws_path.exists() {
+            fs::create_dir_all(&ws_path).context("Failed to create workspace directory")?;
+        }
+        Ok(())
+    }
+
     // Install the Linux kernel
     fn install_kernel(
         version: &str,
@@ -588,13 +601,10 @@ impl SkopeoSyslinuxBuilder {
             .collect::<Vec<_>>();
 
         let follow_config = if gevulot_rt_config {
-            mounts.push(mia_rt_config::Mount {
-                source: "gevulot-rt-config".to_string(),
-                target: "/mnt/gevulot-rt-config".to_string(),
-                fstype: Some("9p".to_string()),
-                flags: None,
-                data: Some("trans=virtio,version=9p2000.L".to_string()),
-            });
+            mounts.push(mia_rt_config::Mount::virtio9p(
+                "gevulot-rt-config".to_string(),
+                "/mnt/gevulot-rt-config".to_string(),
+            ));
             // NOTE: Worker node will mount runtime config file to tag `gevulot-rt-config`.
             //       This is a convention between VM and node we have now.
             Some("/mnt/gevulot-rt-config/config.yaml".to_string())
