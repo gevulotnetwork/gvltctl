@@ -84,7 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// This function sets up the entire command-line interface structure,
 /// including all subcommands and their respective arguments.
 fn setup_command_line_args() -> Result<Command, Box<dyn std::error::Error>> {
-    let chain_args = [
+    let chain_args: [Arg; 6] = [
         Arg::new("endpoint")
             .short('e')
             .long("endpoint")
