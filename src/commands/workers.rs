@@ -37,7 +37,10 @@ pub async fn get_worker(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::er
         let worker: gevulot_rs::models::Worker = worker.into();
         print_object(_sub_m, &worker)?;
     } else {
-        println!("Worker ID is required");
+        print_object(_sub_m, &serde_json::json!({
+            "status": "error",
+            "message": "Worker ID is required"
+        }))?;
     }
     Ok(())
 }
@@ -79,7 +82,11 @@ pub async fn create_worker(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std:
         )
         .await?;
 
-    println!("{}", resp.id);
+    print_object(_sub_m, &serde_json::json!({
+        "status": "success",
+        "message": "Worker created successfully",
+        "worker_id": resp.id
+    }))?;
     Ok(())
 }
 
@@ -94,7 +101,6 @@ pub async fn create_worker(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std:
 ///
 /// A Result containing () if successful, or a Box<dyn std::error::Error> if an error occurs.
 pub async fn delete_worker(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Deleting a worker");
     let worker_id = _sub_m
         .get_one::<String>("id")
         .ok_or("Worker ID is required")?;
@@ -117,6 +123,9 @@ pub async fn delete_worker(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std:
         )
         .await?;
 
-    println!("deleted {}", worker_id);
+    print_object(_sub_m, &serde_json::json!({
+        "status": "success",
+        "message": format!("Worker {} deleted successfully", worker_id)
+    }))?;
     Ok(())
 }
