@@ -93,8 +93,8 @@ impl ImageBuilder for SkopeoSyslinuxBuilder {
                 print(&format!("✅\n"))?;
             }
 
-            print("Creating workspace directory...")?;
-            Self::create_workspace()?;
+            print("Creating input/output context directories...")?;
+            Self::create_mount_dirs()?;
             print("✅\n")?;
 
             if let Some(kernel_path) = &options.kernel_file {
@@ -125,7 +125,7 @@ impl ImageBuilder for SkopeoSyslinuxBuilder {
                     &container_rt_config,
                     &kernel_modules,
                     &options.mounts,
-                    !options.no_gevulot_rt_config,
+                    !options.no_gevulot_runtime,
                     !options.no_default_mounts,
                 )?;
                 print(&format!("✅\n"))?;
@@ -464,11 +464,15 @@ impl SkopeoSyslinuxBuilder {
             .context("Failed to install rootfs from built container")
     }
 
-    /// Create `/workspace` directory in the VM, which will be used as output mountpoint.
-    fn create_workspace() -> Result<()> {
-        let ws_path = env::temp_dir().join("mnt").join("workspace");
-        if !ws_path.exists() {
-            fs::create_dir_all(&ws_path).context("Failed to create workspace directory")?;
+    /// Create `/mnt/input` and `/mnt/output` directories in the VM, which will be used as input and
+    /// output context mountpoints.
+    fn create_mount_dirs() -> Result<()> {
+        let mnt = env::temp_dir().join("mnt").join("mnt");
+        for path in [mnt.join("input"), mnt.join("output")] {
+            if !path.exists() {
+                fs::create_dir_all(&path)
+                    .context(format!("Failed to create {} directory", path.display()))?;
+            }
         }
         Ok(())
     }
@@ -576,7 +580,7 @@ impl SkopeoSyslinuxBuilder {
         container_rt_config: &MiaRuntimeConfig,
         kernel_modules: &Vec<String>,
         mounts: &Vec<String>,
-        gevulot_rt_config: bool,
+        gevulot_runtime: bool,
         default_mounts: bool,
     ) -> Result<()> {
         let mut mounts = mounts
@@ -600,32 +604,34 @@ impl SkopeoSyslinuxBuilder {
             })
             .collect::<Vec<_>>();
 
-        let follow_config = if gevulot_rt_config {
+        let follow_config = if gevulot_runtime {
+            let gevulot_mnt_dir = env::temp_dir().join("mnt").join("mnt").join("gevulot");
+            for dirname in ["rt-config", "input", "output"] {
+                let dirpath = gevulot_mnt_dir.join(dirname);
+                Self::run_command(&["mkdir", "-p", dirpath.to_str().unwrap()], true)
+                    .context(format!("Failed to create {} directory", dirpath.display()))?;
+            }
+
+            // NOTE: Worker node will mount input and output contexts to these tags.
+            mounts.push(mia_rt_config::Mount::virtio9p(
+                "gevulot-input".to_string(),
+                "/mnt/gevulot/input".to_string(),
+            ));
+            mounts.push(mia_rt_config::Mount::virtio9p(
+                "gevulot-output".to_string(),
+                "/mnt/gevulot/output".to_string(),
+            ));
+
             mounts.push(mia_rt_config::Mount::virtio9p(
                 "gevulot-rt-config".to_string(),
-                "/mnt/gevulot-rt-config".to_string(),
+                "/mnt/gevulot/rt-config".to_string(),
             ));
             // NOTE: Worker node will mount runtime config file to tag `gevulot-rt-config`.
             //       This is a convention between VM and node we have now.
-            Some("/mnt/gevulot-rt-config/config.yaml".to_string())
+            Some("/mnt/gevulot/rt-config/config.yaml".to_string())
         } else {
             None
         };
-
-        Self::run_command(
-            &[
-                "mkdir",
-                "-p",
-                env::temp_dir()
-                    .join("mnt")
-                    .join("mnt")
-                    .join("gevulot-rt-config")
-                    .to_str()
-                    .unwrap(),
-            ],
-            true,
-        )
-        .context("Failed to create gevulot-rt-config directory")?;
 
         let rt_config = MiaRuntimeConfig {
             version: mia_rt_config::VERSION,
