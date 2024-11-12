@@ -1,7 +1,8 @@
-use crate::builders::skopeo_builder::SkopeoSyslinuxBuilder;
-use crate::builders::{BuildOptions, ImageBuilder};
-use anyhow::Result;
-use clap::{Arg, ArgGroup, ValueHint};
+use anyhow::{Context, Result};
+use clap::{Arg, ArgGroup, ArgMatches, ValueHint};
+use std::path::PathBuf;
+
+use gvltctl::builders::linux_vm::{self, LinuxVMBuildContext};
 
 pub fn get_command() -> clap::Command {
     clap::Command::new("build")
@@ -204,8 +205,107 @@ pub fn get_command() -> clap::Command {
         )
 }
 
-pub async fn build(matches: &clap::ArgMatches) -> Result<()> {
+/// CLI options for Linux VM builder.
+#[derive(Clone, Debug)]
+pub struct BuildOptions {
+    pub container_source: Option<String>,
+    pub rootfs_dir: Option<String>,
+    pub containerfile: Option<String>,
+    pub image_size: String,
+    pub kernel_version: String,
+    pub kernel_url: String,
+    pub kernel_file: Option<String>,
+    pub nvidia_drivers: bool,
+    pub kernel_modules: Vec<String>,
+    pub mounts: Vec<String>,
+    pub no_gevulot_runtime: bool,
+    pub no_default_mounts: bool,
+    pub init: Option<String>,
+    pub init_args: Option<String>,
+    pub rw_root: bool,
+    pub mbr_file: Option<String>,
+    pub output_file: String,
+    pub force: bool,
+    pub quiet: bool,
+}
+
+impl TryFrom<&ArgMatches> for BuildOptions {
+    type Error = &'static str;
+
+    fn try_from(matches: &ArgMatches) -> Result<Self, Self::Error> {
+        Ok(BuildOptions {
+            container_source: matches.get_one::<String>("container_source").cloned(),
+            rootfs_dir: matches.get_one::<String>("rootfs_dir").cloned(),
+            containerfile: matches.get_one::<String>("containerfile").cloned(),
+            image_size: matches
+                .get_one::<String>("image_size")
+                .ok_or("need image size")?
+                .to_string(),
+            kernel_version: matches
+                .get_one::<String>("kernel_version")
+                .ok_or("need kernel version")?
+                .to_string(),
+            kernel_url: matches
+                .get_one::<String>("kernel_url")
+                .ok_or("need kernel URL")?
+                .clone(),
+            kernel_file: matches.get_one::<String>("kernel_file").cloned(),
+            nvidia_drivers: matches.get_flag("nvidia_drivers"),
+            kernel_modules: matches
+                .get_many::<String>("kernel_module")
+                .unwrap_or_default()
+                .cloned()
+                .collect::<Vec<_>>(),
+            mounts: matches
+                .get_many::<String>("mount")
+                .unwrap_or_default()
+                .cloned()
+                .collect::<Vec<_>>(),
+            no_gevulot_runtime: matches.get_flag("no_gevulot_runtime"),
+            no_default_mounts: matches.get_flag("no_default_mounts"),
+            init: matches.get_one::<String>("init").cloned(),
+            init_args: matches.get_one::<String>("init_args").cloned(),
+            rw_root: matches.get_flag("rw_root"),
+            mbr_file: matches.get_one::<String>("mbr_file").cloned(),
+            output_file: matches
+                .get_one::<String>("output_file")
+                .unwrap()
+                .to_string(),
+            force: matches.get_flag("force"),
+            quiet: matches.get_flag("quiet"),
+        })
+    }
+}
+
+impl TryFrom<&BuildOptions> for LinuxVMBuildContext {
+    type Error = anyhow::Error;
+
+    fn try_from(opts: &BuildOptions) -> Result<Self, Self::Error> {
+        let kernel_url = opts.kernel_url.clone();
+        let kernel_file = opts.kernel_file.as_ref().map(|path| PathBuf::from(path));
+        let kernel_version = opts.kernel_version.clone();
+        // TODO: support blocked sizes like 1G and 100M
+        let image_size = opts.image_size.parse().context("parse image size")?;
+        let image_path = PathBuf::from(&opts.output_file);
+        let rootfs_dir = opts.rootfs_dir.as_ref().map(PathBuf::from);
+        let force = opts.force;
+
+        let opts = linux_vm::BuildOpts {
+            image_size,
+            image_path,
+            force,
+            kernel_file,
+            kernel_url,
+            kernel_version,
+            rootfs_dir,
+        };
+
+        Ok(Self::from_opts(opts))
+    }
+}
+
+pub async fn build(matches: &ArgMatches) -> Result<()> {
     let options = BuildOptions::try_from(matches).map_err(|e| anyhow::anyhow!(e))?;
-    let builder = SkopeoSyslinuxBuilder {};
-    builder.build(&options)
+    let mut build_context = LinuxVMBuildContext::try_from(&options)?;
+    linux_vm::build(&mut build_context)
 }
