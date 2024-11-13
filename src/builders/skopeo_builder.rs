@@ -470,7 +470,7 @@ impl SkopeoSyslinuxBuilder {
         let mnt = env::temp_dir().join("mnt").join("mnt");
         for path in [mnt.join("input"), mnt.join("output")] {
             if !path.exists() {
-                fs::create_dir_all(&path)
+                Self::run_command(&["mkdir", "-p", &format!("{}", path.display())], true)
                     .context(format!("Failed to create {} directory", path.display()))?;
             }
         }
