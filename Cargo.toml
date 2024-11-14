@@ -26,8 +26,7 @@ tokio = { version = "1", features = ["full"] }
 toml = "0.8.19"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-mia-rt-config = { git = "https://github.com/gevulotnetwork/mia.git", tag = "v0.2.1" }
-mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", tag = "v0.2.1" }
+mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", tag = "mia-installer-0.2.2" }
 
 anyhow = "1"
 log = "0.4.22"
