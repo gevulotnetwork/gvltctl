@@ -1,13 +1,11 @@
 use anyhow::{anyhow, Context, Result};
 use log::{debug, info};
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::{fmt, fs};
-use unix_path::{Path as UnixPath, PathBuf as UnixPathBuf};
 
 use crate::builders::Step;
 
-use super::filesystem::FileSystem;
+use super::mount::Mount;
 use super::utils::run_command;
 use super::LinuxVMBuildContext;
 
@@ -188,25 +186,15 @@ impl Step<LinuxVMBuildContext> for Install {
             .get::<Kernel>("kernel")
             .ok_or(anyhow!("cannot install kernel: kernel not found"))?;
 
-        let fs = ctx
+        let mount = ctx
             .0
-            .get::<FileSystem>("fs")
-            .ok_or(anyhow!("cannot install kernel: filesystem not found"))?;
+            .get::<Mount>("mount")
+            .ok_or(anyhow!("cannot install kernel: mount handler not found"))?;
 
-        let mut kfile = fs::File::open(kernel.path()).context("open kernel file")?;
-        let mut kernel_bytes = Vec::new();
-        kfile
-            .read_to_end(&mut kernel_bytes)
-            .context("read kernel file")?;
-        drop(kfile);
+        let kernel_path = mount.path().join("bzImage");
+        fs::copy(kernel.path(), &kernel_path)?;
 
-        let path = UnixPath::new("bzImage");
-        fs.write_file(&path, &kernel_bytes)?;
-
-        ctx.0.set(
-            "installed-kernel",
-            Box::new(UnixPathBuf::from("/").join(path)),
-        );
+        ctx.0.set("installed-kernel", Box::new(kernel_path));
 
         Ok(())
     }

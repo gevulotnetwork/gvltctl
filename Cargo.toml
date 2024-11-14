@@ -8,8 +8,10 @@ repository = "https://github.com/gevulotnetwork/gvltctl"
 description = "Gevulot Control CLI"
 
 [features]
-default = ["syslinux"]
-syslinux = []
+default = ["ext4", "fuse"]
+fuse = []
+ext4 = []
+fat32 = ["dep:fatfs", "dep:fscommon", "dep:unix_path"]
 
 [dependencies]
 # TODO: change rev to tag when available
@@ -29,10 +31,6 @@ tokio = { version = "1", features = ["full"] }
 toml = "0.8.19"
 anyhow = "1"
 ctrlc = "3.4"
-# fatfs = "0.3.6"
-fatfs = { git = "https://github.com/rafalh/rust-fatfs.git", branch = "master" }
-fscommon = "0.1"
-gpt = "4"
 log = "0.4.22"
 mbrman = "0.5"
 num_cpus = "1.16.0"
@@ -40,5 +38,11 @@ oci-spec = "0.7.0"
 tempdir = "0.3.7"
 thiserror = "1"
 fs_extra = "1"
-unix_path = "1"
-walkdir = "2"
+which = "7"
+semver = "1"
+cfg-if = "1"
+
+# fat32 dependencies
+fatfs = { git = "https://github.com/rafalh/rust-fatfs.git", branch = "master", optional = true }
+fscommon = { version = "0.1", optional = true }
+unix_path = { version = "1", optional = true }

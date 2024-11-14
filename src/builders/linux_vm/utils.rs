@@ -5,7 +5,8 @@ use std::fmt;
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 
-pub fn run_command<I, S>(commands: I, as_root: bool) -> Result<String>
+/// Run command returning decoded stdout and stderr.
+pub fn run_command<I, S>(commands: I, as_root: bool) -> Result<(String, String)>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr> + Clone + fmt::Debug,
@@ -46,7 +47,10 @@ where
         .wait_with_output()
         .context("Failed to wait for command")?;
     if output.status.success() {
-        Ok(String::from_utf8(output.stdout).context("Failed to parse command stdout")?)
+        Ok((
+            String::from_utf8(output.stdout).context("Failed to parse command stdout")?,
+            String::from_utf8(output.stderr).context("Failed to parse command stderr")?
+        ))
     } else {
         String::from_utf8(output.stderr)
             .context("Failed to parse command stderr")?

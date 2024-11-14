@@ -2,7 +2,7 @@ use anyhow::{bail, Context, Result};
 use log::{debug, info};
 use std::ffi::OsStr;
 use std::fmt;
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
@@ -38,6 +38,22 @@ impl ImageFile {
             .context("seek for image size")?;
         file.write_all(&[0]).context("extend image file")?;
 
+        Ok(Self {
+            path: path.as_ref().to_path_buf(),
+            size,
+        })
+    }
+
+    /// Use existing image file.
+    pub fn from_existing<P1, P2>(source: P1, path: P2, overwrite: bool) -> Result<Self>
+    where
+        P1: AsRef<Path>,
+        P2: AsRef<Path>,
+    {
+        if path.as_ref().exists() && !overwrite {
+            bail!("Output file '{}' already exists.", path.as_ref().display());
+        }
+        let size = fs::copy(source.as_ref(), path.as_ref()).context("copy image file")?;
         Ok(Self {
             path: path.as_ref().to_path_buf(),
             size,
@@ -104,6 +120,38 @@ impl Step<LinuxVMBuildContext> for CreateImageFile {
             ctx.opts().force,
         )?;
         debug!("image file created: {}", &image_file);
+        ctx.0.set("image_file", Box::new(image_file));
+        Ok(())
+    }
+}
+
+/// Use existing disk image file.
+pub struct UseImageFile {
+    base_image: PathBuf,
+}
+
+impl UseImageFile {
+    pub fn new<P>(base_image: P) -> Self
+    where
+        P: AsRef<Path>,
+    {
+        Self {
+            base_image: base_image.as_ref().to_path_buf(),
+        }
+    }
+}
+
+impl Step<LinuxVMBuildContext> for UseImageFile {
+    fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
+        info!("using base image file");
+        debug!("base image file: {}", self.base_image.display());
+        let image_file =
+            ImageFile::from_existing(&self.base_image, &ctx.opts().image_path, ctx.opts().force)?;
+        debug!(
+            "image file copied: {} ({} bytes)",
+            &image_file,
+            image_file.size()
+        );
         ctx.0.set("image_file", Box::new(image_file));
         Ok(())
     }

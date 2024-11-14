@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use log::info;
+use log::{info, trace};
 use mbrman::{MBRHeader, MBRPartitionEntry};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -14,8 +14,8 @@ const SECTOR_SIZE: u32 = 512;
 const ALIGN: u32 = 1;
 const BOOTCODE_SIZE: usize = 440;
 
-/// Master Boot Record.
-#[derive(Debug)]
+/// Master Boot Record handler.
+#[derive(Clone, Debug)]
 pub struct Mbr {
     mbr: mbrman::MBR,
     path: PathBuf,
@@ -55,6 +55,14 @@ impl Mbr {
         };
         mbr.write()?;
         Ok(mbr)
+    }
+
+    /// Read MBR from file.
+    pub fn from_file(path: PathBuf) -> Result<Self> {
+        let mut f = fs::File::open(&path).context("open disk image file")?;
+        let mbr =
+            mbrman::MBR::read_from(&mut f, SECTOR_SIZE).context("read MBR from disk image")?;
+        Ok(Self { mbr, path })
     }
 
     /// Write current description to disk image.
@@ -110,43 +118,22 @@ impl Step<LinuxVMBuildContext> for CreateMBR {
     }
 }
 
-// pub struct CreateGPTPartitions;
+pub struct ReadMBR;
 
-// impl Step for CreateGPTPartitions {
-//     type Context = LinuxVMBuildContext;
+impl Step<LinuxVMBuildContext> for ReadMBR {
+    fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
+        info!("reading Master Boot Record");
+        let image_file = ctx
+            .0
+            .get::<ImageFile>("image_file")
+            .ok_or(anyhow!("cannot create partitions: disk image not found"))?;
 
-//     fn run(&mut self, ctx: &mut Self::Context) -> anyhow::Result<()> {
-//         let image_file = ctx
-//             .image_file
-//             .as_ref()
-//             .ok_or(anyhow!("cannot create partitions: disk image not found"))?;
-//         let mut file = std::fs::OpenOptions::new()
-//             .write(true)
-//             .open(image_file.path())
-//             .context("open image file")?;
+        let mbr = Mbr::from_file(image_file.path().to_path_buf()).context("read MBR")?;
+        // format!("{:#?}", &mbr)
+        //     .lines()
+        //     .for_each(|line| trace!("{}", line));
+        ctx.0.set("mbr", Box::new(mbr));
 
-//         // Create a protective MBR at LBA0
-//         let mbr =
-//             gpt::mbr::ProtectiveMBR::with_lb_size((image_file.size() as u32 / SECTOR_SIZE) - 1);
-//         mbr.overwrite_lba0(&mut file).context("write MBR")?;
-//         drop(file);
-
-//         let mut gdisk = gpt::GptConfig::default()
-//             .writable(true)
-//             .logical_block_size(gpt::disk::LogicalBlockSize::Lb512)
-//             .create(image_file.path())
-//             .context("create GptDisk")?;
-
-//         // At this point, gdisk.primary_header() and gdisk.backup_header() are populated...
-//         gdisk
-//             .add_partition("test1", 1024 * 12, gpt::partition_types::BASIC, 0, None)
-//             .context("add test1 partition")?;
-//         gdisk
-//             .add_partition("test2", 1024 * 18, gpt::partition_types::LINUX_FS, 0, None)
-//             .context("add test2 partition")?;
-
-//         gdisk.write().context("write GPT partition table to disk")?;
-
-//         Ok(())
-//     }
-// }
+        Ok(())
+    }
+}

@@ -298,6 +298,7 @@ impl TryFrom<&BuildOptions> for LinuxVMBuildContext {
             kernel_url,
             kernel_version,
             rootfs_dir,
+            from_scratch: false,
         };
 
         Ok(Self::from_opts(opts))

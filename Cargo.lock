@@ -519,21 +519,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crc"
-version = "3.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69e6e4d7b33a94f0991c26729976b10ebde1d34c3ee82408fb536164fa10d636"
-dependencies = [
- "crc-catalog",
-]
-
-[[package]]
-name = "crc-catalog"
-version = "2.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19d374276b40fb8bbdee95aef7c7fa6b5316ec764510eb64b8dd0e2ed0d7e7f5"
-
-[[package]]
 name = "crc32fast"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1160,18 +1145,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpt"
-version = "4.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ffa5448a0d9d541f1840c0e1b5fe513360861ca83c4b920619f54efe277f9254"
-dependencies = [
- "bitflags 2.6.0",
- "crc",
- "simple-bytes",
- "uuid",
-]
-
-[[package]]
 name = "group"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1188,6 +1161,7 @@ version = "0.1.2"
 dependencies = [
  "anyhow",
  "bip32",
+ "cfg-if",
  "clap 4.5.20",
  "clap_complete",
  "cosmrs",
@@ -1197,13 +1171,13 @@ dependencies = [
  "fs_extra",
  "fscommon",
  "gevulot-rs 0.1.0 (git+https://github.com/gevulotnetwork/gevulot-rs.git?rev=17c3787d96715b895074ca4118d6ea8135b2aea5)",
- "gpt",
  "log",
  "mbrman",
  "mia-installer",
  "num_cpus",
  "oci-spec",
  "rand_core 0.6.4",
+ "semver",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -1212,7 +1186,7 @@ dependencies = [
  "tokio",
  "toml",
  "unix_path",
- "walkdir",
+ "which",
 ]
 
 [[package]]
@@ -1314,6 +1288,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e"
 dependencies = [
  "digest 0.10.7",
+]
+
+[[package]]
+name = "home"
+version = "0.5.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3d1354bf6b7235cb4a0576c2619fd4ed18183f689b12b006a0ee7329eeff9a5"
+dependencies = [
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2871,12 +2854,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "simple-bytes"
-version = "0.2.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c11532d9d241904f095185f35dcdaf930b1427a94d5b01d7002d74ba19b44cc4"
-
-[[package]]
 name = "simple_asn1"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3796,6 +3773,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "which"
+version = "7.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9cad3279ade7346b96e38731a641d7343dd6a53d55083dd54eadfa5a1b38c6b"
+dependencies = [
+ "either",
+ "home",
+ "rustix",
+ "winsafe",
+]
+
+[[package]]
 name = "winapi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4001,6 +3990,12 @@ dependencies = [
  "cfg-if",
  "windows-sys 0.48.0",
 ]
+
+[[package]]
+name = "winsafe"
+version = "0.0.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 
 [[package]]
 name = "wyz"

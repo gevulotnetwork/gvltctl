@@ -7,12 +7,10 @@ use crate::builders::{Context, Pipeline, Steps};
 mod filesystem;
 mod image_file;
 mod kernel;
-// mod loopdev;
 mod mbr;
-// mod mount;
+mod mount;
 mod rootfs;
-#[cfg(feature = "syslinux")]
-mod syslinux;
+mod extlinux;
 mod utils;
 
 /// User-defined build options.
@@ -38,6 +36,8 @@ pub struct BuildOpts {
 
     /// Root filesystem to install.
     pub rootfs_dir: Option<PathBuf>,
+
+    pub from_scratch: bool,
 }
 
 /// Linux VM build context.
@@ -61,12 +61,23 @@ impl LinuxVMBuildContext {
     }
 }
 
+// TODO: fix this, because gvltctl cannot be distributed as self-contained binary this way.
+/// This image contains:
+///  - msdos partition table
+///  - mbr bootcode
+///  - bootloader (syslinux)
+///  - partition p1
+///  - ext4 filesystem
+const BASE_IMAGE_PATH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/src/builders/linux_vm/data/base.img"
+);
+
 pub fn build(ctx: &mut LinuxVMBuildContext) -> anyhow::Result<()> {
     let mut steps: Steps<LinuxVMBuildContext> = Vec::new();
-    dbg!(ctx.opts());
 
-    if ctx.opts().rootfs_dir.is_some() {
-        steps.push(Box::new(rootfs::RootFSFromDir));
+    if let Some(path) = &ctx.opts().rootfs_dir {
+        steps.push(Box::new(rootfs::RootFSFromDir::new(path.clone())));
     }
 
     if ctx.opts().kernel_file.is_some() {
@@ -75,19 +86,31 @@ pub fn build(ctx: &mut LinuxVMBuildContext) -> anyhow::Result<()> {
         steps.push(Box::new(kernel::Build));
     }
 
-    // These steps may be replaced with pre-built image
-    steps.push(Box::new(image_file::CreateImageFile));
-    steps.push(Box::new(mbr::CreateMBR));
-    steps.push(Box::new(filesystem::CreateFat));
-    steps.push(Box::new(syslinux::InstallSyslinux));
+    if ctx.opts().from_scratch {
+        // Creating bootable image from scratch
+        steps.push(Box::new(image_file::CreateImageFile));
+        steps.push(Box::new(mbr::CreateMBR));
+        steps.push(Box::new(filesystem::Create));
+        steps.push(Box::new(extlinux::InstallExtlinux));
+    } else {
+        // Using pre-built base image
+        steps.push(Box::new(image_file::UseImageFile::new(BASE_IMAGE_PATH)));
+        steps.push(Box::new(mbr::ReadMBR));
+        steps.push(Box::new(filesystem::Read));
+    }
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "fuse")] {
+            steps.push(Box::new(mount::MountFileSystem));
+        } else {
+            steps.push(Box::new(loopdev::AttachLoopDevice));
+            steps.push(Box::new(mount::Mount));
+        }
+    }
 
     steps.push(Box::new(kernel::Install));
-    steps.push(Box::new(syslinux::InstallSyslinuxCfg));
-
     steps.push(Box::new(rootfs::InstallRootFS));
-
-    // steps.push(Box::new(loopdev::AttachLoopDevice));
-    // steps.push(Box::new(mount::Mount));
+    steps.push(Box::new(extlinux::InstallExtlinuxCfg));
 
     let mut pipeline = Pipeline::from_ctx(ctx);
     pipeline.add_steps(steps);
