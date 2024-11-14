@@ -901,7 +901,7 @@ dependencies = [
 [[package]]
 name = "gevulot-rs"
 version = "0.1.0"
-source = "git+https://github.com/gevulotnetwork/gevulot-rs.git?rev=6695dcb0e7214a3ec07cdc2d83bbc4ff26ae2d38#6695dcb0e7214a3ec07cdc2d83bbc4ff26ae2d38"
+source = "git+https://github.com/gevulotnetwork/gevulot-rs.git?rev=f6657f57771b1c549a83cfe6fc822c3db687707e#f6657f57771b1c549a83cfe6fc822c3db687707e"
 dependencies = [
  "backon",
  "bip32",
@@ -958,7 +958,7 @@ dependencies = [
 
 [[package]]
 name = "gvltctl"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "bip32",
