@@ -9,7 +9,9 @@ description = "Gevulot Control CLI"
 
 [dependencies]
 # TODO: change rev to tag when available
-gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", rev = "e6c8f044596e566814076374430de65c281bff57" }
+# NOTE: this revision is aligned with `mia-installer` dependency.
+# Be careful changing it.
+gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", rev = "961a71a9ff933ee5767e7f96597767c809e2c36e" }
 
 bip32 = "0.5.1"
 clap = { version = "4", features = ["env", "cargo"] }
@@ -24,8 +26,7 @@ tokio = { version = "1", features = ["full"] }
 toml = "0.8.19"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-mia-rt-config = { git = "https://github.com/gevulotnetwork/mia.git", tag = "v0.2.1" }
-mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", tag = "v0.2.1" }
+mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", tag = "mia-installer-0.2.2" }
 
 anyhow = "1"
 log = "0.4.22"

@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use log::debug;
-use mia_rt_config::MiaRuntimeConfig;
+use gevulot_rs::runtime_config::{self, RuntimeConfig};
 use oci_spec::image::{ImageConfiguration, ImageManifest};
 use std::io::{self, BufRead, BufReader, Write};
 use std::{env, fs, path::Path, process::Command};
@@ -71,7 +71,7 @@ impl ImageBuilder for SkopeoSyslinuxBuilder {
             Self::mount_filesystems(&options.output_file)?;
             print(&format!("✅\n"))?;
 
-            let mut container_rt_config = MiaRuntimeConfig::default();
+            let mut container_rt_config = RuntimeConfig::default();
             let mut kernel_modules = options.kernel_modules.clone();
 
             if let Some(container_source) = &options.container_source {
@@ -301,7 +301,7 @@ impl SkopeoSyslinuxBuilder {
     // Install the root filesystem from a container image
     fn install_rootfs_from_container(
         container_source: &str,
-        rt_config: &mut MiaRuntimeConfig,
+        rt_config: &mut RuntimeConfig,
     ) -> Result<()> {
         // This temp dir will be removed on dropping.
         let target_dir = TempDir::new("").context("Failed to create temporary directory")?;
@@ -387,7 +387,7 @@ impl SkopeoSyslinuxBuilder {
                     let (key, value) = var
                         .split_once('=')
                         .ok_or(anyhow::anyhow!("invalid environment variable"))?;
-                    rt_config.env.push(mia_rt_config::Env {
+                    rt_config.env.push(runtime_config::EnvVar {
                         key: key.to_string(),
                         value: value.to_string(),
                     });
@@ -442,7 +442,7 @@ impl SkopeoSyslinuxBuilder {
     // Build and install the root filesystem from a Containerfile
     fn build_and_install_rootfs_from_containerfile(
         containerfile: &str,
-        rt_config: &mut MiaRuntimeConfig,
+        rt_config: &mut RuntimeConfig,
     ) -> Result<()> {
         let container_source = "containers-storage:localhost/custom_image:latest";
 
@@ -577,7 +577,7 @@ impl SkopeoSyslinuxBuilder {
 
     /// Prepare MIA installation config and run installer.
     fn install_mia(
-        container_rt_config: &MiaRuntimeConfig,
+        container_rt_config: &RuntimeConfig,
         kernel_modules: &Vec<String>,
         mounts: &Vec<String>,
         gevulot_runtime: bool,
@@ -594,7 +594,7 @@ impl SkopeoSyslinuxBuilder {
                     .get(3)
                     .unwrap_or(&"trans=virtio,version=9p2000.L")
                     .to_string();
-                mia_rt_config::Mount {
+                runtime_config::Mount {
                     source,
                     target,
                     fstype: Some(fstype),
@@ -613,16 +613,16 @@ impl SkopeoSyslinuxBuilder {
             }
 
             // NOTE: Worker node will mount input and output contexts to these tags.
-            mounts.push(mia_rt_config::Mount::virtio9p(
+            mounts.push(runtime_config::Mount::virtio9p(
                 "gevulot-input".to_string(),
                 "/mnt/gevulot/input".to_string(),
             ));
-            mounts.push(mia_rt_config::Mount::virtio9p(
+            mounts.push(runtime_config::Mount::virtio9p(
                 "gevulot-output".to_string(),
                 "/mnt/gevulot/output".to_string(),
             ));
 
-            mounts.push(mia_rt_config::Mount::virtio9p(
+            mounts.push(runtime_config::Mount::virtio9p(
                 "gevulot-rt-config".to_string(),
                 "/mnt/gevulot/rt-config".to_string(),
             ));
@@ -633,8 +633,8 @@ impl SkopeoSyslinuxBuilder {
             None
         };
 
-        let rt_config = MiaRuntimeConfig {
-            version: mia_rt_config::VERSION,
+        let rt_config = RuntimeConfig {
+            version: runtime_config::VERSION.to_string(),
             command: container_rt_config.command.clone(),
             args: container_rt_config.args.clone(),
             env: container_rt_config.env.clone(),
@@ -647,7 +647,10 @@ impl SkopeoSyslinuxBuilder {
         };
 
         let mut install_config = mia_installer::InstallConfig::default();
+        install_config.mia_version = "latest".to_string();
+        install_config.mia_platform = "x86_64-unknown-linux-gnu".to_string();
         install_config.prefix = env::temp_dir().join("mnt");
+        install_config.as_root = true;
 
         // In case there is an init system installed in the container
         install_config.overwrite_symlink = true;
