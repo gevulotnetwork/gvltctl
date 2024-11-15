@@ -1,6 +1,6 @@
 [package]
 name = "gvltctl"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 authors = ["Gevulot Team"]
 license = "MIT OR Apache-2.0"
@@ -9,7 +9,7 @@ description = "Gevulot Control CLI"
 
 [dependencies]
 # TODO: change rev to tag when available
-gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", rev = "28b6c9f39ebe8144cbd8eac746d7ada5b8646268" }
+gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", rev = "e6c8f044596e566814076374430de65c281bff57" }
 
 bip32 = "0.5.1"
 clap = { version = "4", features = ["env", "cargo"] }

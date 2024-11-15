@@ -17,7 +17,7 @@ mod commands;
 
 #[cfg(target_os = "linux")]
 use commands::build::*;
-use commands::{pins::*, sudo::*, tasks::*, workers::*};
+use commands::{pins::*, sudo::*, tasks::*, workflows::*,workers::*};
 
 /// Main entry point for the Gevulot Control CLI application.
 ///
@@ -717,23 +717,4 @@ async fn generate_completion(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn st
         eprintln!("No shell specified for completion generation");
     }
     Ok(())
-}
-async fn list_workflows(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Listing all workflows");
-    todo!();
-}
-
-async fn get_workflow(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Getting a specific workflow");
-    todo!();
-}
-
-async fn create_workflow(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Creating a new workflow");
-    todo!();
-}
-
-async fn delete_workflow(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Deleting a workflow");
-    todo!();
 }
