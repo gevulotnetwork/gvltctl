@@ -31,8 +31,8 @@ pub async fn list_workers(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::
 ///
 /// A Result containing () if successful, or a Box<dyn std::error::Error> if an error occurs.
 pub async fn get_worker(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = connect_to_gevulot(_sub_m).await?;
     if let Some(worker_id) = _sub_m.get_one::<String>("id") {
+        let mut client = connect_to_gevulot(_sub_m).await?;
         let worker = client.workers.get(worker_id).await?;
         let worker: gevulot_rs::models::Worker = worker.into();
         print_object(_sub_m, &worker)?;

@@ -33,8 +33,8 @@ pub async fn list_tasks(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::er
 ///
 /// A Result indicating success or an error if the task retrieval fails.
 pub async fn get_task(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = crate::connect_to_gevulot(_sub_m).await?;
     if let Some(task_id) = _sub_m.get_one::<String>("id") {
+        let mut client = crate::connect_to_gevulot(_sub_m).await?;
         let task = client.tasks.get(task_id).await?;
         let task: gevulot_rs::models::Task = task.into();
         print_object(_sub_m, &task)?;
