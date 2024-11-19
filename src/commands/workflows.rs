@@ -26,7 +26,7 @@ pub async fn get_workflow(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::
 }
 
 pub async fn create_workflow(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    let workflow: gevulot_rs::models::WorkflowSpec = read_file(_sub_m).await?;
+    let workflow: gevulot_rs::models::Workflow = read_file(_sub_m).await?;
     let mut client = connect_to_gevulot(_sub_m).await?;
     let me = client
         .base_client
@@ -41,7 +41,7 @@ pub async fn create_workflow(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn st
         .create(MsgCreateWorkflow{
             creator: me,
             spec: Some(WorkflowSpec{
-                stages: workflow.stages.iter().map(|s| Stage{
+                stages: workflow.spec.stages.iter().map(|s| Stage{
                     tasks: s.tasks.iter().map(|t| TaskSpec{
                         image: t.image.clone(),
                         command: t.command.clone(),
