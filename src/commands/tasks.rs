@@ -39,7 +39,10 @@ pub async fn get_task(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::erro
         let task: gevulot_rs::models::Task = task.into();
         print_object(_sub_m, &task)?;
     } else {
-        println!("Task ID is required");
+        print_object(_sub_m, &serde_json::json!({
+            "status": "error",
+            "message": "Task ID is required"
+        }))?;
     }
     Ok(())
 }
@@ -109,6 +112,10 @@ pub async fn create_task(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::e
         )
         .await?;
 
-    println!("Created task with ID: {}", resp.id);
+    print_object(_sub_m, &serde_json::json!({
+        "status": "success",
+        "message": "Task created successfully",
+        "task_id": resp.id
+    }))?;
     Ok(())
 }

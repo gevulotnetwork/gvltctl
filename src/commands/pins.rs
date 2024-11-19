@@ -84,7 +84,11 @@ pub async fn create_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::er
         )
         .await?;
 
-    println!("Created pin with CID: {}", &pin.spec.cid);
+    // Replace println with print_object for consistent formatting
+    print_object(_sub_m, &serde_json::json!({
+        "status": "success",
+        "message": format!("Created pin with CID: {}", &pin.spec.cid)
+    }))?;
     Ok(())
 }
 
@@ -97,7 +101,6 @@ pub async fn create_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::er
 /// * `_sub_m` - A reference to the ArgMatches struct containing parsed command-line arguments.
 ///              This is used to access the CID of the pin to delete and any additional options.
 pub async fn delete_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Deleting a pin");
     let pin_cid = _sub_m
         .get_one::<String>("cid")
         .ok_or("Pin CID is required")?;
@@ -123,6 +126,10 @@ pub async fn delete_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::er
         )
         .await?;
 
-    println!("Deleted pin with CID: {}", pin_cid);
+    // Use print_object for consistent formatting
+    print_object(_sub_m, &serde_json::json!({
+        "status": "success",
+        "message": format!("Deleted pin with CID: {}", pin_cid)
+    }))?;
     Ok(())
 }
