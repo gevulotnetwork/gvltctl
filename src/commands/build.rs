@@ -134,7 +134,7 @@ pub fn get_command() -> clap::Command {
             Arg::new("no_gevulot_runtime")
                 .long("no-gevulot-runtime")
                 .help("[MIA] Don't install Gevulot runtime. Only for debug purposes.")
-                .help("[MIA] Don't install Gevulot runtime. Only for debug purposes.\n\
+                .long_help("[MIA] Don't install Gevulot runtime. Only for debug purposes.\n\
                        No following config will be provided to the VM. Only built-in one will be used.\n\
                        No input/output context directories will be mounted.\n\
                        Note: Gevulot worker will provide runtime config through gevulot-rt-config.\n\
