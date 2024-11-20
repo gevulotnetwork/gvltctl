@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use log::debug;
-use gevulot_rs::runtime_config::{self, RuntimeConfig};
+use mia_installer::runtime_config::{self, RuntimeConfig};
 use oci_spec::image::{ImageConfiguration, ImageManifest};
 use std::io::{self, BufRead, BufReader, Write};
 use std::{env, fs, path::Path, process::Command};
