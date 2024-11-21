@@ -116,10 +116,25 @@ pub fn get_command() -> clap::Command {
                 .required(false),
         )
         .arg(
+            Arg::new("mia_version")
+                .long("mia-version")
+                .value_name("STRING")
+                .help("[MIA] Install specified MIA version.")
+                .long_help("[MIA] Install specified MIA version.\n\
+                            Accepted format is from mia-installer. Examples:\n\
+                            - latest\n\
+                            - 0.1.0\n\
+                            - file:/path/to/mia/binary\n\
+                            This option can't be used together with --init or --init-args.")
+                .conflicts_with_all(["init", "init_args"])
+                .required(false)
+                .default_value("latest"),
+        )
+        .arg(
             Arg::new("no_gevulot_runtime")
                 .long("no-gevulot-runtime")
                 .help("[MIA] Don't install Gevulot runtime. Only for debug purposes.")
-                .help("[MIA] Don't install Gevulot runtime. Only for debug purposes.\n\
+                .long_help("[MIA] Don't install Gevulot runtime. Only for debug purposes.\n\
                        No following config will be provided to the VM. Only built-in one will be used.\n\
                        No input/output context directories will be mounted.\n\
                        Note: Gevulot worker will provide runtime config through gevulot-rt-config.\n\

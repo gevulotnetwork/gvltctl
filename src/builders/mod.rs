@@ -19,6 +19,7 @@ pub struct BuildOptions {
     pub nvidia_drivers: bool,
     pub kernel_modules: Vec<String>,
     pub mounts: Vec<String>,
+    pub mia_version: Option<String>,
     pub no_gevulot_runtime: bool,
     pub no_default_mounts: bool,
     pub init: Option<String>,
@@ -100,6 +101,13 @@ impl std::fmt::Display for BuildOptions {
         )?;
         writeln!(
             f,
+            "| MIA Version      | {:<42} |",
+            self.mia_version
+                .as_deref()
+                .unwrap_or("None")
+        )?;
+        writeln!(
+            f,
             "| Gevulot runtime  | {:<42} |",
             !self.no_gevulot_runtime
         )?;
@@ -166,6 +174,7 @@ impl TryFrom<&clap::ArgMatches> for BuildOptions {
                 .unwrap_or_default()
                 .cloned()
                 .collect::<Vec<_>>(),
+            mia_version: matches.get_one::<String>("mia_version").cloned(),
             no_gevulot_runtime: matches.get_flag("no_gevulot_runtime"),
             no_default_mounts: matches.get_flag("no_default_mounts"),
             init: matches.get_one::<String>("init").cloned(),
