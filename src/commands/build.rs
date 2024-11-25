@@ -64,7 +64,7 @@ pub fn get_command() -> clap::Command {
                 .help("Linux kernel version to use (e.g., v6.10). Use 'latest' for the most recent version. \
                        This kernel will be compiled from source.")
                 .required(false)
-                .default_value("latest"),
+                .default_value("6.12"),
         )
         .arg(
             Arg::new("kernel_url")
