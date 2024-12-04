@@ -122,6 +122,10 @@ impl ImageBuilder for SkopeoSyslinuxBuilder {
             if options.init.is_none() {
                 print(&format!("Installing MIA (Minimal Init Application)... "))?;
                 Self::install_mia(
+                    options
+                        .mia_version
+                        .as_ref()
+                        .context("MIA version is required")?,
                     &container_rt_config,
                     &kernel_modules,
                     &options.mounts,
@@ -577,6 +581,7 @@ impl SkopeoSyslinuxBuilder {
 
     /// Prepare MIA installation config and run installer.
     fn install_mia(
+        mia_version: &str,
         container_rt_config: &RuntimeConfig,
         kernel_modules: &Vec<String>,
         mounts: &Vec<String>,
@@ -642,12 +647,12 @@ impl SkopeoSyslinuxBuilder {
             mounts,
             default_mounts,
             kernel_modules: kernel_modules.clone(),
-            bootcmd: vec![],
             follow_config,
+            ..Default::default()
         };
 
         let mut install_config = mia_installer::InstallConfig::default();
-        install_config.mia_version = "latest".to_string();
+        install_config.mia_version = mia_version.to_string();
         install_config.mia_platform = "x86_64-unknown-linux-gnu".to_string();
         install_config.prefix = env::temp_dir().join("mnt");
         install_config.as_root = true;

@@ -17,7 +17,7 @@ mod commands;
 
 #[cfg(target_os = "linux")]
 use commands::build::*;
-use commands::{pins::*, sudo::*, tasks::*, workflows::*,workers::*};
+use commands::{pins::*, sudo::*, tasks::*, workers::*, workflows::*};
 
 /// Main entry point for the Gevulot Control CLI application.
 ///
@@ -578,6 +578,15 @@ async fn send_tokens(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error
         .await
         .token_transfer(receiver, amount.parse()?)
         .await?;
+
+    let output = serde_json::json!({
+        "success": true,
+        "amount": amount,
+        "receiver": receiver
+    });
+
+    print_object(_sub_m, &output)?;
+
     Ok(())
 }
 
@@ -605,9 +614,14 @@ async fn account_info(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::erro
         .await
         .get_account_balance(address)
         .await?;
-    println!("Account number: {}", account.account_number);
-    println!("Account sequence: {}", account.sequence);
-    println!("Balance: {:#?}", balance.amount);
+
+    let output = serde_json::json!({
+        "account_number": account.account_number,
+        "sequence": account.sequence,
+        "balance": balance.amount.to_string()
+    });
+
+    print_object(_sub_m, &output)?;
     Ok(())
 }
 
@@ -641,13 +655,40 @@ async fn generate_key(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::erro
     // Get the ECDSA/secp256k1 signing and verification keys for the xprv and xpub
     let sk = SigningKey::from_slice(&child_xprv.private_key().to_bytes())?;
 
-    println!("{}", sk.public_key().account_id("gvlt").unwrap());
+    let account_id = sk.public_key().account_id("gvlt").unwrap();
+    let phrase = mnemonic.phrase();
+
+    let output = serde_json::json!({
+        "account_id": account_id,
+        "mnemonic": phrase
+    });
 
     if let Some(file) = _sub_m.get_one::<String>("file") {
         let mut file = File::create(file)?;
-        file.write_all(mnemonic.phrase().as_bytes())?;
-    } else {
-        println!("{}", mnemonic.phrase());
+        file.write_all(phrase.as_bytes())?;
+    }
+
+    match _sub_m.get_one::<String>("format").map(String::as_str) {
+        Some("json") => {
+            let json = serde_json::to_string(&output)?;
+            println!("{}", json);
+        }
+        Some("prettyjson") => {
+            let prettyjson = serde_json::to_string_pretty(&output)?;
+            println!("{}", prettyjson);
+        }
+        Some("toml") => {
+            let toml = toml::to_string(&output)?;
+            println!("{}", toml);
+        }
+        Some("yaml") => {
+            let yaml = serde_yaml::to_string(&output)?;
+            println!("{}", yaml);
+        }
+        _ => {
+            println!("{}", account_id);
+            println!("{}", phrase);
+        }
     }
 
     Ok(())
@@ -686,8 +727,10 @@ async fn compute_key(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error
     // Get the ECDSA/secp256k1 signing and verification keys for the xprv and xpub
     let sk = SigningKey::from_slice(&child_xprv.private_key().to_bytes())?;
 
-    println!("{}", sk.public_key().account_id("gvlt").unwrap());
+    let account_id = sk.public_key().account_id("gvlt").unwrap();
 
+    let output = serde_json::json!({ "account_id": account_id });
+    print_object(_sub_m, &output)?;
     Ok(())
 }
 

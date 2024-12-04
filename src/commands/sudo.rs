@@ -1,12 +1,9 @@
+use clap::{Arg, Command, ValueHint};
 use gevulot_rs::proto::gevulot::gevulot::{
     MsgSudoDeletePin, MsgSudoDeleteTask, MsgSudoDeleteWorker, MsgSudoFreezeAccount,
 };
 
-use crate::connect_to_gevulot;
-
-const OK: &str = "ok";
-
-use clap::{Arg, Command, ValueHint};
+use crate::{connect_to_gevulot, print_object};
 
 pub fn get_command(chain_args: &[Arg]) -> clap::Command {
     Command::new("sudo")
@@ -83,9 +80,15 @@ pub async fn sudo_delete_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn st
             cid: pin_id.clone(),
         };
         client.sudo.delete_pin(msg).await?;
-        println!("{}", OK);
+        print_object(_sub_m, &serde_json::json!({
+            "status": "success",
+            "message": "Pin deleted successfully"
+        }))?;
     } else {
-        println!("Pin ID is required");
+        print_object(_sub_m, &serde_json::json!({
+            "status": "error",
+            "message": "Pin ID is required"
+        }))?;
     }
     Ok(())
 }
@@ -107,9 +110,15 @@ pub async fn sudo_delete_worker(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn
             id: worker_id.clone(),
         };
         client.sudo.delete_worker(msg).await?;
-        println!("{}", OK);
+        print_object(_sub_m, &serde_json::json!({
+            "status": "success",
+            "message": "Worker deleted successfully"
+        }))?;
     } else {
-        println!("Worker ID is required");
+        print_object(_sub_m, &serde_json::json!({
+            "status": "error",
+            "message": "Worker ID is required"
+        }))?;
     }
     Ok(())
 }
@@ -131,9 +140,15 @@ pub async fn sudo_delete_task(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn s
             id: task_id.clone(),
         };
         client.sudo.delete_task(msg).await?;
-        println!("{}", OK);
+        print_object(_sub_m, &serde_json::json!({
+            "status": "success",
+            "message": "Task deleted successfully"
+        }))?;
     } else {
-        println!("Task ID is required");
+        print_object(_sub_m, &serde_json::json!({
+            "status": "error",
+            "message": "Task ID is required"
+        }))?;
     }
     Ok(())
 }
@@ -155,9 +170,15 @@ pub async fn sudo_freeze_account(_sub_m: &clap::ArgMatches) -> Result<(), Box<dy
             account: account.clone(),
         };
         client.sudo.freeze_account(msg).await?;
-        println!("{}", OK);
+        print_object(_sub_m, &serde_json::json!({
+            "status": "success",
+            "message": "Account frozen successfully"
+        }))?;
     } else {
-        println!("Account address is required");
+        print_object(_sub_m, &serde_json::json!({
+            "status": "error",
+            "message": "Account address is required"
+        }))?;
     }
     Ok(())
 }

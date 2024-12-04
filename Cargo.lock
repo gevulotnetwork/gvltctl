@@ -434,6 +434,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 
 [[package]]
+name = "const_format"
+version = "0.2.33"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50c655d81ff1114fb0dcdea9225ea9f0cc712a6f8d189378e82bdf62a473a64b"
+dependencies = [
+ "const_format_proc_macros",
+]
+
+[[package]]
+name = "const_format_proc_macros"
+version = "0.2.33"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eff1a44b93f47b1bac19a27932f5c591e43d1ba357ee4f61526c8a25603f0eb1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-xid",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1038,10 +1058,11 @@ dependencies = [
 [[package]]
 name = "gevulot-rs"
 version = "0.1.0"
-source = "git+https://github.com/gevulotnetwork/gevulot-rs.git?rev=f6657f57771b1c549a83cfe6fc822c3db687707e#f6657f57771b1c549a83cfe6fc822c3db687707e"
+source = "git+https://github.com/gevulotnetwork/gevulot-rs.git?rev=997bd6c5266a98a69253c58b4bd1a35e8d3ec7ae#997bd6c5266a98a69253c58b4bd1a35e8d3ec7ae"
 dependencies = [
  "backon",
  "bip32",
+ "const_format",
  "cosmos-sdk-proto",
  "cosmrs",
  "derivative",
@@ -1054,6 +1075,7 @@ dependencies = [
  "prost-build",
  "rand 0.8.5",
  "rand_core 0.6.4",
+ "semver",
  "serde",
  "serde_json",
  "tendermint",
@@ -1633,14 +1655,14 @@ checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 
 [[package]]
 name = "mia-installer"
-version = "0.2.2"
-source = "git+https://github.com/gevulotnetwork/mia.git?rev=4434218127c7aa98a74a4abb9fca72eadfc04c40#4434218127c7aa98a74a4abb9fca72eadfc04c40"
+version = "0.2.3"
+source = "git+https://github.com/gevulotnetwork/mia.git?tag=mia-installer-0.2.3#de5b5f12c8dc701fba2fd68a5b4e6e5469388ca0"
 dependencies = [
  "anyhow",
  "env_logger 0.11.5",
  "flate2",
  "fs_extra",
- "gevulot-rs 0.1.0 (git+https://github.com/gevulotnetwork/gevulot-rs.git?rev=f6657f57771b1c549a83cfe6fc822c3db687707e)",
+ "gevulot-rs 0.1.0 (git+https://github.com/gevulotnetwork/gevulot-rs.git?rev=997bd6c5266a98a69253c58b4bd1a35e8d3ec7ae)",
  "log",
  "octocrab",
  "reqwest",
@@ -3470,6 +3492,12 @@ name = "unicode-width"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
+
+[[package]]
+name = "unicode-xid"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
 name = "unsafe-libyaml"
