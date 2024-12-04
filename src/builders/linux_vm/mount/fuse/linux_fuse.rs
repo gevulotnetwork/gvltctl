@@ -7,13 +7,15 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use tempdir::TempDir;
 
-use crate::builders::linux_vm::filesystem::FileSystem;
+use crate::builders::linux_vm::filesystem::{Ext4, FileSystemHandler};
 use crate::builders::linux_vm::utils::run_command;
-use crate::builders::linux_vm::LinuxVMBuildContext;
+use crate::builders::linux_vm::{LinuxVMBuildContext, LinuxVMBuilderError as Error};
 use crate::builders::Step;
 
+use super::MountHandler;
+
 const FUSE2FS_BINNAME: &str = "fuse2fs";
-const MIN_VERSION: &str = "1.47.0";
+const MIN_VERSION: Version = Version::new(1, 47, 0);
 
 /// `fuse2fs` wrapper.
 #[derive(Debug)]
@@ -43,12 +45,10 @@ impl Fuse2fs {
         version_output.lines().for_each(|line| trace!("{}", line));
         let version = Version::parse(&version_output[8..14])
             .context("parsing output of `fuse2fs --version`")?;
-        let required_version =
-            Version::parse(MIN_VERSION).context("parsing required version string")?;
-        if version < required_version {
+        if version < MIN_VERSION {
             bail!(
                 "fuse2fs version is too low. Required >={}, found {}",
-                required_version.to_string(),
+                MIN_VERSION.to_string(),
                 version.to_string()
             );
         }
@@ -83,22 +83,30 @@ impl Fuse2fs {
 
 /// FUSE mount.
 #[derive(Debug)]
-pub struct Mount {
+pub struct FuseMount {
     fuse2fs: Fuse2fs,
     mountpoint: TempDir,
 }
 
-impl fmt::Display for Mount {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&format!("{}", self.mountpoint.path().display()))
+impl FuseMount {
+    /// `fuse2fs` wrapper.
+    pub fn fuse2fs(&self) -> &Fuse2fs {
+        &self.fuse2fs
     }
 }
 
-impl Mount {
-    /// Mount filesystem.
-    pub fn new<P: AsRef<Path>>(fs: &FileSystem, source: P) -> Result<Self> {
+impl MountHandler for FuseMount {
+    fn path(&self) -> &Path {
+        self.mountpoint.path()
+    }
+
+    fn new<F, P>(fs: &F, source: P) -> Result<Self>
+    where
+        F: FileSystemHandler,
+        P: AsRef<Path>,
+    {
         let fuse2fs = Fuse2fs::locate().context("locating fuse2fs")?;
-        let offset = fs.start();
+        let offset = fs.offset();
         let mountpoint = TempDir::new("mount").context("create temp directory for mounting")?;
         fuse2fs.run([
             OsStr::new("-o"),
@@ -112,29 +120,9 @@ impl Mount {
         })
     }
 
-    /// `fuse2fs` wrapper.
-    pub fn fuse2fs(&self) -> &Fuse2fs {
-        &self.fuse2fs
-    }
-
-    /// Path to mounted directory.
-    pub fn path(&self) -> &Path {
-        self.mountpoint.path()
-    }
-
-    /// Unmount filesystem.
-    pub fn unmount(self) -> Result<()> {
-        self.unmount_no_drop()
-    }
-
-    /// Unmount filesystem without dropping self object.
-    /// Makes self invalid.
     fn unmount_no_drop(&self) -> Result<()> {
         let mut umount_args = vec![OsStr::new("umount"), self.mountpoint.path().as_os_str()];
-        match run_command(
-            [OsStr::new("lsof"), self.mountpoint.path().as_os_str()],
-            false,
-        ) {
+        match run_command([OsStr::new("lsof"), self.mountpoint.path().as_os_str()]) {
             Ok(_) => {
                 trace!("umount target is busy, performing lazy umount");
                 umount_args.insert(1, OsStr::new("--lazy"));
@@ -143,12 +131,18 @@ impl Mount {
                 trace!("umount target is not busy");
             }
         }
-        run_command(&umount_args, false).context("unmounting filesystem")?;
+        run_command(&umount_args).context("unmounting filesystem")?;
         Ok(())
     }
 }
 
-impl Drop for Mount {
+impl fmt::Display for FuseMount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&format!("{}", self.mountpoint.path().display()))
+    }
+}
+
+impl Drop for FuseMount {
     fn drop(&mut self) {
         // ignore errors
         debug!("unmounting {}", &self);
@@ -156,19 +150,25 @@ impl Drop for Mount {
     }
 }
 
+/// Create new filesystem FUSE-based mount.
 pub struct MountFileSystem;
 
 impl Step<LinuxVMBuildContext> for MountFileSystem {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
-        info!("mounting filesystem");
+        info!("mounting filesystem (FUSE)");
 
-        let fs = ctx.0.get::<FileSystem>("fs").ok_or(anyhow!(
-            "cannot mount filesystem: filesystem handler not found"
+        let fs = ctx.0.get::<Ext4>("fs").ok_or(Error::invalid_context(
+            "mount filesystem",
+            "filesystem handler",
         ))?;
 
-        let mount = Mount::new(fs, fs.path()).context("mount filesystem")?;
+        let mount = FuseMount::new(fs, fs.path()).context("mount filesystem")?;
         debug!("mounted filesystem at {}", &mount);
 
+        // TODO: probably there is a nice way to retrieve this path from trait object of Mount.
+        // However I couldn't find a way to cast into something like `dyn HasMountPoint`.
+        ctx.0
+            .set("mountpoint", Box::new(mount.path().to_path_buf()));
         ctx.0.set("mount", Box::new(mount));
 
         Ok(())

@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Result};
 use clap::{Arg, ArgGroup, ArgMatches, ValueHint};
 use std::path::PathBuf;
 
@@ -42,9 +42,21 @@ pub fn get_command() -> clap::Command {
                        The file will be used to build a new image which will then be used as the source.")
                 .required(false)
         )
+        .arg(
+            Arg::new("gen_base")
+                .long("generate-base-image")
+                .help("Generate only base VM image (for dev purposes).")
+                .long_help("Generate only base VM image (for dev purposes).\n\
+                    If this option is enabled, only base VM image will be generated.\n\
+                    Base image includes bootloader, partition table and filesystem.\n\
+                    Image created with this command is used by default when building VM image from container.
+                    This option implies --no-fuse.")
+                .required(false)
+                .action(clap::ArgAction::SetTrue)
+        )
         .group(
             ArgGroup::new("image")
-                .args(["container_source", "rootfs_dir", "containerfile"])
+                .args(["container_source", "rootfs_dir", "containerfile", "gen_base"])
                 .multiple(false)
                 .required(true)
         )
@@ -55,7 +67,6 @@ pub fn get_command() -> clap::Command {
                 .value_name("SIZE")
                 .help("Size of the disk image (e.g., 10G, 1024M). This determines the total capacity of the VM's virtual disk.")
                 .required(false)
-                .default_value("10G"),
         )
         .arg(
             Arg::new("kernel_version")
@@ -65,7 +76,7 @@ pub fn get_command() -> clap::Command {
                 .help("Linux kernel version to use (e.g., v6.10). Use 'latest' for the most recent version. \
                        This kernel will be compiled from source.")
                 .required(false)
-                .default_value("latest"),
+                .default_value("v6.12"),
         )
         .arg(
             Arg::new("kernel_url")
@@ -189,6 +200,28 @@ pub fn get_command() -> clap::Command {
                 .default_value("disk.img"),
         )
         .arg(
+            Arg::new("no_fuse")
+                .long("no-fuse")
+                .help("Don't use FUSE to mount target image.")
+                .long_help("Don't use FUSE to mount target image.\n\
+                    Use native OS mounts instead. Requires root privileges.")
+                .required(false)
+                .action(clap::ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("from_scratch")
+                .long("from-scratch")
+                .help("Build VM image from scratch with new filesystem and bootloader.")
+                .long_help("Build VM image from scratch with new filesystem and bootloader.\n\
+                    By default pre-built VM image with EXT4 filesystem and EXTLINUX bootloader will be used.\n\
+                    During build process filesystem will be expanded to required size.\n\
+                    If this option is set, completely fresh VM image will be created.\n\
+                    Additional dependencies are required: extlinux.\n\
+                    This option implies --no-fuse.")
+                .required(false)
+                .action(clap::ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new("force")
                 .long("force")
                 .help("Force the build and try to fix known problems along the way. This will overwrite existing files and attempt to clean up previous build artifacts.")
@@ -211,7 +244,7 @@ pub struct BuildOptions {
     pub container_source: Option<String>,
     pub rootfs_dir: Option<String>,
     pub containerfile: Option<String>,
-    pub image_size: String,
+    pub image_size: Option<String>,
     pub kernel_version: String,
     pub kernel_url: String,
     pub kernel_file: Option<String>,
@@ -225,6 +258,9 @@ pub struct BuildOptions {
     pub rw_root: bool,
     pub mbr_file: Option<String>,
     pub output_file: String,
+    pub fuse: bool,
+    pub from_scratch: bool,
+    pub gen_base: bool,
     pub force: bool,
     pub quiet: bool,
 }
@@ -237,10 +273,7 @@ impl TryFrom<&ArgMatches> for BuildOptions {
             container_source: matches.get_one::<String>("container_source").cloned(),
             rootfs_dir: matches.get_one::<String>("rootfs_dir").cloned(),
             containerfile: matches.get_one::<String>("containerfile").cloned(),
-            image_size: matches
-                .get_one::<String>("image_size")
-                .ok_or("need image size")?
-                .to_string(),
+            image_size: matches.get_one::<String>("image_size").cloned(),
             kernel_version: matches
                 .get_one::<String>("kernel_version")
                 .ok_or("need kernel version")?
@@ -271,6 +304,9 @@ impl TryFrom<&ArgMatches> for BuildOptions {
                 .get_one::<String>("output_file")
                 .unwrap()
                 .to_string(),
+            fuse: !matches.get_flag("no_fuse"),
+            from_scratch: matches.get_flag("from_scratch"),
+            gen_base: matches.get_flag("gen_base"),
             force: matches.get_flag("force"),
             quiet: matches.get_flag("quiet"),
         })
@@ -284,21 +320,29 @@ impl TryFrom<&BuildOptions> for LinuxVMBuildContext {
         let kernel_url = opts.kernel_url.clone();
         let kernel_file = opts.kernel_file.as_ref().map(|path| PathBuf::from(path));
         let kernel_version = opts.kernel_version.clone();
-        // TODO: support blocked sizes like 1G and 100M
-        let image_size = opts.image_size.parse().context("parse image size")?;
+        let image_size = if let Some(size) = &opts.image_size {
+            size.parse().map_err(|_| anyhow!("invalid image size"))?
+        } else {
+            linux_vm::MIN_IMAGE_SIZE
+        };
         let image_path = PathBuf::from(&opts.output_file);
         let rootfs_dir = opts.rootfs_dir.as_ref().map(PathBuf::from);
         let force = opts.force;
+        let gen_base_img = opts.gen_base;
+        let from_scratch = opts.from_scratch;
+        let fuse = opts.fuse && !from_scratch;
 
         let opts = linux_vm::BuildOpts {
             image_size,
             image_path,
             force,
+            fuse,
             kernel_file,
             kernel_url,
             kernel_version,
             rootfs_dir,
-            from_scratch: false,
+            gen_base_img,
+            from_scratch,
         };
 
         Ok(Self::from_opts(opts))

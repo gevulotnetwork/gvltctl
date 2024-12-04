@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use bytesize::ByteSize;
 use log::{debug, info};
 use std::ffi::OsStr;
 use std::fmt;
@@ -17,30 +18,31 @@ pub struct ImageFile {
     path: PathBuf,
 
     /// Current size of the file.
-    size: u64,
+    size: ByteSize,
 }
 
 impl ImageFile {
     /// Create new image file with given size.
-    pub fn create<P>(path: P, size: u64, overwrite: bool) -> Result<Self>
+    pub fn create<P>(path: P, size: ByteSize, overwrite: bool) -> Result<Self>
     where
         P: AsRef<Path>,
     {
         if path.as_ref().exists() && !overwrite {
             bail!("Output file '{}' already exists.", path.as_ref().display());
         }
-        let mut file = File::create(&path).context("create image file")?;
+        let mut file = File::create(&path).context("failed to create image file")?;
 
         // This will create sparse file on Linux
         // TODO: research this on other platforms
         let size = file
-            .seek(SeekFrom::Start(size - 1))
+            .seek(SeekFrom::Start(size.as_u64() - 1))
             .context("seek for image size")?;
-        file.write_all(&[0]).context("extend image file")?;
+        file.write_all(&[0])
+            .context("failed to extend image file")?;
 
         Ok(Self {
             path: path.as_ref().to_path_buf(),
-            size,
+            size: ByteSize::b(size),
         })
     }
 
@@ -53,29 +55,29 @@ impl ImageFile {
         if path.as_ref().exists() && !overwrite {
             bail!("Output file '{}' already exists.", path.as_ref().display());
         }
-        let size = fs::copy(source.as_ref(), path.as_ref()).context("copy image file")?;
+        let size = fs::copy(source.as_ref(), path.as_ref()).context("failed to copy image file")?;
         Ok(Self {
             path: path.as_ref().to_path_buf(),
-            size,
+            size: ByteSize::b(size),
         })
     }
 
     /// Extend file returning old size.
-    pub fn extend<P>(&mut self, value: u32) -> Result<u64> {
+    pub fn extend(&mut self, value: ByteSize) -> Result<ByteSize> {
         let mut file = OpenOptions::new()
-            .write(true)
             .append(true)
             .open(&self.path)
-            .context("open image file")?;
+            .context("failed to open image file")?;
 
-        let current_size = file
-            .seek(SeekFrom::Current(0))
-            .context("seek for current image size")?;
+        let current_size = self.size;
+        self.size = current_size + value;
 
-        self.size = file
-            .seek(SeekFrom::Current(value as i64 - 1))
-            .context("seek for image size")?;
-        file.write_all(&[0]).context("extend image file")?;
+        ByteSize::b(
+            file.seek(SeekFrom::Current(value.0 as i64 - 1))
+                .context("failed to seek for image size")?,
+        );
+        file.write_all(&[0])
+            .context("failed to extend image file")?;
 
         Ok(current_size)
     }
@@ -91,7 +93,7 @@ impl ImageFile {
     }
 
     /// Current size of the file.
-    pub fn size(&self) -> u64 {
+    pub fn size(&self) -> ByteSize {
         self.size
     }
 }
@@ -116,10 +118,14 @@ impl Step<LinuxVMBuildContext> for CreateImageFile {
         info!("creating image file");
         let image_file = ImageFile::create(
             &ctx.opts().image_path,
-            ctx.opts().image_size.into(),
+            ctx.opts().image_size,
             ctx.opts().force,
         )?;
-        debug!("image file created: {}", &image_file);
+        debug!(
+            "image file created: {} ({})",
+            &image_file,
+            image_file.size()
+        );
         ctx.0.set("image_file", Box::new(image_file));
         Ok(())
     }
@@ -147,11 +153,7 @@ impl Step<LinuxVMBuildContext> for UseImageFile {
         debug!("base image file: {}", self.base_image.display());
         let image_file =
             ImageFile::from_existing(&self.base_image, &ctx.opts().image_path, ctx.opts().force)?;
-        debug!(
-            "image file copied: {} ({} bytes)",
-            &image_file,
-            image_file.size()
-        );
+        debug!("image file copied: {} ({})", &image_file, image_file.size());
         ctx.0.set("image_file", Box::new(image_file));
         Ok(())
     }

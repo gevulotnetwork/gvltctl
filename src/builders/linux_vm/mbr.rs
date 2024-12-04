@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use log::{info, trace};
+use log::{debug, info};
 use mbrman::{MBRHeader, MBRPartitionEntry};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -23,11 +23,19 @@ pub struct Mbr {
 
 impl Mbr {
     /// Create new MBR for given file with a single partition for the whole drive.
-    pub fn new(path: PathBuf, disk_size: u32) -> Result<Self> {
+    ///
+    /// File size is given in bytes. If the size is not divisable by sector size, disk size will be
+    /// rounded to floor.
+    pub fn new(path: PathBuf, file_size: u64) -> Result<Self> {
         let mut header = MBRHeader::new(DISK_SIGNATURE);
 
-        // First sector stores MBR, so we subtract it from partition size
-        let partition_size = (disk_size - 1 * SECTOR_SIZE) / SECTOR_SIZE;
+        // Size of the disk in sectors
+        let disk_size = (file_size / SECTOR_SIZE as u64)
+            .try_into()
+            .map_err(|_| anyhow!("disk size is too big (max supported by MBR is 2 TiB)"))?;
+
+        // First sector stores VBR, so we subtract it from partition size
+        let partition_size = disk_size - 1;
 
         header.partition_1 = MBRPartitionEntry {
             boot: mbrman::BOOT_ACTIVE,
@@ -59,9 +67,9 @@ impl Mbr {
 
     /// Read MBR from file.
     pub fn from_file(path: PathBuf) -> Result<Self> {
-        let mut f = fs::File::open(&path).context("open disk image file")?;
-        let mbr =
-            mbrman::MBR::read_from(&mut f, SECTOR_SIZE).context("read MBR from disk image")?;
+        let mut f = fs::File::open(&path).context("failed to open disk image file")?;
+        let mbr = mbrman::MBR::read_from(&mut f, SECTOR_SIZE)
+            .context("failed to read MBR from disk image")?;
         Ok(Self { mbr, path })
     }
 
@@ -70,10 +78,10 @@ impl Mbr {
         let mut file = fs::OpenOptions::new()
             .write(true)
             .open(&self.path)
-            .context("open disk image file")?;
+            .context("failed to open disk image file")?;
         self.mbr
             .write_into(&mut file)
-            .context("write MBR to disk image")?;
+            .context("failed to write MBR to disk image")?;
         Ok(())
     }
 
@@ -93,6 +101,19 @@ impl Mbr {
         self.write()
     }
 
+    /// Extend partition-1 returning old size. Disk size is also updated.
+    /// Changes are written to disk.
+    /// `extend` is given in bytes.
+    pub fn extend_partition(&mut self, extend: u64) -> Result<()> {
+        let extend: u32 = (extend / SECTOR_SIZE as u64)
+            .try_into()
+            .map_err(|_| anyhow!("disk size too big"))?;
+        self.mbr.disk_size += extend;
+        self.mbr.header.partition_1.sectors += extend;
+        self.write()?;
+        Ok(())
+    }
+
     /// Path to disk image.
     pub fn path(&self) -> &Path {
         self.path.as_path()
@@ -110,8 +131,22 @@ impl Step<LinuxVMBuildContext> for CreateMBR {
             .get::<ImageFile>("image_file")
             .ok_or(anyhow!("cannot create partitions: disk image not found"))?;
 
-        let mbr = Mbr::new(image_file.path().to_path_buf(), ctx.opts().image_size)
-            .context("create MBR")?;
+        let mbr = Mbr::new(
+            image_file.path().to_path_buf(),
+            ctx.opts().image_size.as_u64(),
+        )
+        .context("failed to create MBR")?;
+
+        debug!(
+            "disk size={}s, sector size={}",
+            mbr.mbr().disk_size,
+            mbr.mbr().sector_size
+        );
+        debug!(
+            "created partition: start={}s, size={}s",
+            mbr.mbr().header.partition_1.starting_lba,
+            mbr.mbr().header.partition_1.sectors
+        );
         ctx.0.set("mbr", Box::new(mbr));
 
         Ok(())
@@ -128,10 +163,7 @@ impl Step<LinuxVMBuildContext> for ReadMBR {
             .get::<ImageFile>("image_file")
             .ok_or(anyhow!("cannot create partitions: disk image not found"))?;
 
-        let mbr = Mbr::from_file(image_file.path().to_path_buf()).context("read MBR")?;
-        // format!("{:#?}", &mbr)
-        //     .lines()
-        //     .for_each(|line| trace!("{}", line));
+        let mbr = Mbr::from_file(image_file.path().to_path_buf()).context("failed to read MBR")?;
         ctx.0.set("mbr", Box::new(mbr));
 
         Ok(())

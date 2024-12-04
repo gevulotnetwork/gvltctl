@@ -41,6 +41,16 @@ impl<'ctx, Ctx> Pipeline<'ctx, Ctx> {
         }
     }
 
+    /// Create new pipeline with given context and steps.
+    pub fn from_steps<I>(ctx: &'ctx mut Ctx, steps: I) -> Self
+    where
+        I: IntoIterator<Item = Box<dyn Step<Ctx>>>,
+    {
+        let mut pipeline = Self::from_ctx(ctx);
+        pipeline.add_steps(steps);
+        pipeline
+    }
+
     /// Run pipeline.
     pub fn run(mut self) -> Result<()> {
         for mut step in self.steps {
@@ -84,6 +94,18 @@ impl Context {
             .flatten()
     }
 
+    /// Pop value from context by key. `T` is a downcast type of value.
+    /// Returns `None` if `key` doesn't exists or downcast type is wrong.
+    pub fn pop<T>(&mut self, key: &'static str) -> Option<Box<T>>
+    where
+        T: 'static,
+    {
+        self.inner
+            .remove(key)
+            .map(|t| t.downcast::<T>().ok())
+            .flatten()
+    }
+
     /// Set value for the key.
     pub fn set(&mut self, key: &'static str, value: Box<dyn Any>) {
         self.inner.insert(key, value);
@@ -92,7 +114,7 @@ impl Context {
 
 #[cfg(test)]
 mod tests {
-    use super::{Context, Step, Pipeline, Result};
+    use super::{Context, Pipeline, Result, Step};
 
     struct Step1;
 
@@ -107,7 +129,9 @@ mod tests {
 
     impl Step<String> for Step2 {
         fn run(&mut self, ctx: &mut String) -> Result<()> {
-            ctx.contains("step1").then(|| {}).ok_or(anyhow::anyhow!("step2 failed"))
+            ctx.contains("step1")
+                .then(|| {})
+                .ok_or(anyhow::anyhow!("step2 failed"))
         }
     }
 

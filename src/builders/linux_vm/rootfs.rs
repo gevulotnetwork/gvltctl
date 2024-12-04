@@ -3,24 +3,24 @@ use fs_extra::dir;
 use log::{debug, info};
 use std::path::{Path, PathBuf};
 use std::fmt;
+use bytesize::ByteSize;
 
 use crate::builders::Step;
 
-use super::mount::Mount;
 use super::LinuxVMBuildContext;
 
 /// Root filesystem handler.
 #[derive(Clone, Debug)]
 pub struct RootFS {
     path: PathBuf,
-    size: u64,
+    size: ByteSize,
 }
 
 impl RootFS {
     /// Create roof filesystem handler from given path.
     pub fn from_path(path: PathBuf) -> Result<Self> {
         debug_assert!(path.is_dir());
-        let size = dir::get_size(&path).context("get root filesystem size")?;
+        let size = ByteSize::b(dir::get_size(&path).context("get root filesystem size")?);
         Ok(Self { size, path })
     }
 
@@ -30,13 +30,13 @@ impl RootFS {
     }
 
     /// Size of all files in the filesystem.
-    pub fn size(&self) -> u64 {
+    pub fn size(&self) -> ByteSize {
         self.size
     }
 
     /// Install root filesystem from host to target filesystem.
-    pub fn install(&self, mount: &Mount) -> Result<()> {
-        dir::copy(self.path(), mount.path(), &dir::CopyOptions::new())
+    pub fn install(&self, mountpoint: &Path) -> Result<()> {
+        dir::copy(self.path(), mountpoint, &dir::CopyOptions::new())
             .context("copy root filesystem content")
             .map_err(Into::into)
             .map(|_| ())
@@ -87,11 +87,11 @@ impl Step<LinuxVMBuildContext> for InstallRootFS {
             "cannot install root filesystem: root filesystem not found"
         ))?;
 
-        let mount = ctx.0.get::<Mount>("mount").ok_or(anyhow!(
+        let mountpoint = ctx.0.get::<PathBuf>("mountpoint").ok_or(anyhow!(
             "cannot install root filesystem: mount handler not found"
         ))?;
 
-        rootfs.install(&mount)?;
+        rootfs.install(mountpoint)?;
 
         Ok(())
     }

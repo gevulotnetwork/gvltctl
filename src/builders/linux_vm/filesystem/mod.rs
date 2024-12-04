@@ -1,3 +1,14 @@
+use std::path::Path;
+
+/// Type implementing gerenal interface for filesystem handler.
+pub trait FileSystemHandler: Sized {
+    /// Filesystem partition offset in bytes.
+    fn offset(&self) -> u64;
+
+    /// Path to image file.
+    fn path(&self) -> &Path;
+}
+
 #[cfg(feature = "fat32")]
 mod fat32;
 

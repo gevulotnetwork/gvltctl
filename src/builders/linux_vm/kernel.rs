@@ -2,10 +2,12 @@ use anyhow::{anyhow, Context, Result};
 use log::{debug, info};
 use std::path::{Path, PathBuf};
 use std::{fmt, fs};
+use bytesize::ByteSize;
 
 use crate::builders::Step;
 
-use super::mount::Mount;
+use super::filesystem::FileSystemHandler;
+use super::image_file::ImageFile;
 use super::utils::run_command;
 use super::LinuxVMBuildContext;
 
@@ -18,7 +20,7 @@ pub enum Kernel {
         path: PathBuf,
 
         /// Size of the kernel file.
-        size: u64,
+        size: ByteSize,
     },
 
     /// Kernel compiled from sources.
@@ -36,7 +38,7 @@ pub enum Kernel {
         path: PathBuf,
 
         /// Size of the kernel file.
-        size: u64,
+        size: ByteSize,
     },
 }
 
@@ -60,7 +62,7 @@ impl Kernel {
     }
 
     /// Size of kernel binary.
-    pub fn size(&self) -> u64 {
+    pub fn size(&self) -> ByteSize {
         match self {
             Kernel::Precompiled { size, .. } => *size,
             Kernel::Sources { size, .. } => *size,
@@ -106,7 +108,7 @@ impl Kernel {
                         &kernel_dir,
                     ]
                 };
-                run_command(&clone_args, false).context("Failed to clone kernel repository")?;
+                run_command(&clone_args).context("Failed to clone kernel repository")?;
             }
 
             debug!("Building sources");
@@ -115,9 +117,8 @@ impl Kernel {
                 .context("Failed to change to kernel directory")?;
 
             // Configure and build the kernel
-            run_command(&["make", "x86_64_defconfig"], false)
-                .context("Failed to configure kernel")?;
-            run_command(&["make", &format!("-j{}", num_cpus::get())], false)
+            run_command(&["make", "x86_64_defconfig"]).context("Failed to configure kernel")?;
+            run_command(&["make", &format!("-j{}", num_cpus::get())])
                 .context("Failed to build kernel")?;
 
             std::env::set_current_dir(current_dir)
@@ -131,14 +132,14 @@ impl Kernel {
             version: version.to_string(),
             source_path: PathBuf::from(&kernel_dir),
             path: PathBuf::from(&bzimage_path),
-            size: metadata.len(),
+            size: ByteSize::b(metadata.len()),
         })
     }
 
     /// Use precompiled kernel.
     pub fn precompiled(path: PathBuf) -> Result<Self> {
         let metadata = fs::metadata(&path).context("get kernel file metadata")?;
-        let size = metadata.len();
+        let size = ByteSize::b(metadata.len());
         Ok(Self::Precompiled { path, size })
     }
 }
@@ -186,15 +187,22 @@ impl Step<LinuxVMBuildContext> for Install {
             .get::<Kernel>("kernel")
             .ok_or(anyhow!("cannot install kernel: kernel not found"))?;
 
-        let mount = ctx
+        let mountpoint = ctx
             .0
-            .get::<Mount>("mount")
-            .ok_or(anyhow!("cannot install kernel: mount handler not found"))?;
+            .get::<PathBuf>("mountpoint")
+            .ok_or(anyhow!("cannot install kernel: mount point not found"))?;
 
-        let kernel_path = mount.path().join("bzImage");
-        fs::copy(kernel.path(), &kernel_path)?;
+        let kernel_path = mountpoint.join("bzImage");
+        match fs::copy(kernel.path(), &kernel_path) {
+            Err(err) => {
+                return Err(err).context("kernel installation failed");
+            }
+            Ok(installed_size) => {
+                log::trace!("installed {} bytes", installed_size);
+            }
+        }
 
-        ctx.0.set("installed-kernel", Box::new(kernel_path));
+        ctx.0.set("installed_kernel", Box::new(kernel_path));
 
         Ok(())
     }

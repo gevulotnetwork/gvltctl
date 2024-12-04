@@ -8,8 +8,7 @@ repository = "https://github.com/gevulotnetwork/gvltctl"
 description = "Gevulot Control CLI"
 
 [features]
-default = ["ext4", "fuse"]
-fuse = []
+default = ["ext4"]
 ext4 = []
 fat32 = ["dep:fatfs", "dep:fscommon", "dep:unix_path"]
 
@@ -41,6 +40,7 @@ fs_extra = "1"
 which = "7"
 semver = "1"
 cfg-if = "1"
+bytesize = "1"
 
 # fat32 dependencies
 fatfs = { git = "https://github.com/rafalh/rust-fatfs.git", branch = "master", optional = true }
