@@ -11,7 +11,7 @@ description = "Gevulot Control CLI"
 # TODO: change rev to tag when available
 # NOTE: this revision is aligned with `mia-installer` dependency.
 # Be careful changing it.
-gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", rev = "961a71a9ff933ee5767e7f96597767c809e2c36e" }
+gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", rev = "0b3c05e34c7680c2dd3ef6caaf27b2f96bca279d" }
 
 bip32 = "0.5.1"
 clap = { version = "4", features = ["env", "cargo"] }
