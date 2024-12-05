@@ -50,6 +50,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(("list", sub_m)) => list_tasks(sub_m).await?,
             Some(("get", sub_m)) => get_task(sub_m).await?,
             Some(("create", sub_m)) => create_task(sub_m).await?,
+            Some(("accept", sub_m)) => accept_task(sub_m).await?,
+            Some(("decline", sub_m)) => decline_task(sub_m).await?,
+            Some(("finish", sub_m)) => finish_task(sub_m).await?,
             _ => println!("Unknown task command"),
         },
         Some(("workflow", sub_m)) => match sub_m.subcommand() {
@@ -260,6 +263,88 @@ fn setup_command_line_args() -> Result<Command, Box<dyn std::error::Error>> {
                                 .action(ArgAction::Set),
                         )
                         .args(&chain_args),
+                )
+                .subcommand(
+                    Command::new("accept")
+                        .about("Accept a task (you probably should not use this)")
+                        .arg(
+                            Arg::new("id")
+                                .value_name("ID")
+                                .help("The ID of the task to accept")
+                                .required(true)
+                                .index(1),
+                        )
+                        .arg(
+                            Arg::new("worker_id")
+                                .value_name("WORKER_ID")
+                                .help("The ID of the worker accepting the task")
+                                .required(true)
+                                .index(2),
+                        )
+                        .args(&chain_args),
+                )
+                .subcommand(
+                    Command::new("decline")
+                        .about("Decline a task (you probably should not use this)")
+                        .arg(
+                            Arg::new("id")
+                                .value_name("ID")
+                                .help("The ID of the task to decline")
+                                .required(true)
+                                .index(1),
+                        )
+                        .arg(
+                            Arg::new("worker_id")
+                                .value_name("WORKER_ID")
+                                .help("The ID of the worker declining the task")
+                                .required(true)
+                                .index(2),
+                        )
+                        .args(&chain_args),
+                )
+                .subcommand(
+                    Command::new("finish")
+                        .about("Finish a task (you probably should not use this)")
+                        .arg(
+                            Arg::new("id")
+                                .value_name("ID")
+                                .help("The ID of the task to finish")
+                                .required(true)
+                                .index(1),
+                        )
+                        .arg(
+                            Arg::new("exit_code")
+                                .value_name("EXIT_CODE")
+                                .help("The exit code of the task")
+                                .value_parser(value_parser!(i32))
+                                .required(false),
+                        )
+                        .arg(
+                            Arg::new("stdout")
+                                .value_name("STDOUT")
+                                .help("The stdout output of the task")
+                                .required(false),
+                        )
+                        .arg(
+                            Arg::new("stderr")
+                                .value_name("STDERR")
+                                .help("The stderr output of the task")
+                                .required(false),
+                        )
+                        .arg(
+                            Arg::new("error")
+                                .value_name("ERROR")
+                                .help("Any error message from the task")
+                                .required(false),
+                        )
+                        .arg(
+                            Arg::new("output_contexts")
+                                .value_name("OUTPUT_CONTEXTS")
+                                .help("Output contexts produced by the task")
+                                .required(false)
+                                .action(ArgAction::Append),
+                        )
+                        .args(&chain_args),
                 ),
         )
         // Workflow subcommand
@@ -327,6 +412,14 @@ fn setup_command_line_args() -> Result<Command, Box<dyn std::error::Error>> {
                         .value_hint(ValueHint::Other)
                         .action(ArgAction::Set)
                         .global(true),
+                )
+                .arg(
+                    Arg::new("format")
+                        .short('F')
+                        .long("format")
+                        .value_name("FORMAT")
+                        .default_value("yaml")
+                        .help("Sets the output format (yaml, json, prettyjson, toml)"),
                 ),
         )
         .subcommand(
@@ -348,6 +441,14 @@ fn setup_command_line_args() -> Result<Command, Box<dyn std::error::Error>> {
                         .env("GEVULOT_PASSWORD")
                         .help("The password to compute the key with")
                         .value_hint(ValueHint::Other),
+                )
+                .arg(
+                    Arg::new("format")
+                        .short('F')
+                        .long("format")
+                        .value_name("FORMAT")
+                        .default_value("yaml")
+                        .help("Sets the output format (yaml, json, prettyjson, toml"),
                 ),
         )
         // Send subcommand
