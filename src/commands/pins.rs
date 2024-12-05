@@ -66,7 +66,7 @@ pub async fn create_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::er
         .ok_or("No address found, did you set a mnemonic?")?;
 
     // Create the pin using the MsgCreatePinBuilder
-    client
+    let resp = client
         .pins
         .create(
             MsgCreatePinBuilder::default()
@@ -87,7 +87,8 @@ pub async fn create_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::er
     // Replace println with print_object for consistent formatting
     print_object(_sub_m, &serde_json::json!({
         "status": "success",
-        "message": format!("Created pin with CID: {}", &pin.spec.cid)
+        "message": format!("Created pin with id: {}", resp.id),
+        "id": resp.id,
     }))?;
     Ok(())
 }
