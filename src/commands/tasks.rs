@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use gevulot_rs::builders::{ByteSize, ByteUnit, MsgCreateTaskBuilder};
+use gevulot_rs::builders::{
+    ByteSize, ByteUnit, MsgAcceptTaskBuilder, MsgCreateTaskBuilder, MsgDeclineTaskBuilder, MsgFinishTaskBuilder,
+};
 
 use crate::{connect_to_gevulot, print_object, read_file};
 
@@ -39,10 +41,13 @@ pub async fn get_task(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::erro
         let task: gevulot_rs::models::Task = task.into();
         print_object(_sub_m, &task)?;
     } else {
-        print_object(_sub_m, &serde_json::json!({
-            "status": "error",
-            "message": "Task ID is required"
-        }))?;
+        print_object(
+            _sub_m,
+            &serde_json::json!({
+                "status": "error",
+                "message": "Task ID is required"
+            }),
+        )?;
     }
     Ok(())
 }
@@ -112,10 +117,102 @@ pub async fn create_task(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::e
         )
         .await?;
 
-    print_object(_sub_m, &serde_json::json!({
-        "status": "success",
-        "message": "Task created successfully",
-        "task_id": resp.id
-    }))?;
+    print_object(
+        _sub_m,
+        &serde_json::json!({
+            "status": "success",
+            "message": "Task created successfully",
+            "task_id": resp.id
+        }),
+    )?;
+    Ok(())
+}
+
+pub async fn accept_task(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = connect_to_gevulot(_sub_m).await?;
+    let me = client
+        .base_client
+        .write()
+        .await
+        .address
+        .clone()
+        .ok_or("No address found, did you set a mnemonic?")?;
+
+    let task_id = _sub_m.get_one::<String>("id").unwrap();
+    let worker_id = _sub_m.get_one::<String>("worker_id").unwrap();
+    client
+        .tasks
+        .accept(
+            MsgAcceptTaskBuilder::default()
+                .creator(me.clone())
+                .task_id(task_id.clone())
+                .worker_id(worker_id.clone())
+                .into_message()?,
+        )
+        .await?;
+    Ok(())
+}
+
+pub async fn decline_task(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = connect_to_gevulot(_sub_m).await?;
+    let me = client
+        .base_client
+        .write()
+        .await
+        .address
+        .clone()
+        .ok_or("No address found, did you set a mnemonic?")?;
+
+    let task_id = _sub_m.get_one::<String>("id").unwrap();
+    let worker_id = _sub_m.get_one::<String>("worker_id").unwrap();
+    client
+        .tasks
+        .decline(
+            MsgDeclineTaskBuilder::default()
+                .creator(me.clone())
+                .task_id(task_id.clone())
+                .worker_id(worker_id.clone())
+                .into_message()?,
+        )
+        .await?;
+    Ok(())
+}
+
+pub async fn finish_task(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = connect_to_gevulot(_sub_m).await?;
+    let me = client
+        .base_client
+        .write()
+        .await
+        .address
+        .clone()
+        .ok_or("No address found, did you set a mnemonic?")?;
+
+    let task_id = _sub_m.get_one::<String>("id").unwrap();
+    let exit_code = _sub_m.get_one::<i32>("exit_code").cloned();
+    let stdout = _sub_m.get_one::<String>("stdout").cloned();
+    let stderr = _sub_m.get_one::<String>("stderr").cloned();
+    let error = _sub_m.get_one::<String>("error").cloned();
+    let output_contexts: Vec<String> = _sub_m
+        .get_many::<String>("output_contexts")
+        .unwrap_or_default()
+        .into_iter()
+        .map(|e| e.to_string())
+        .collect();
+    
+    client
+        .tasks
+        .finish(
+            MsgFinishTaskBuilder::default()
+                .creator(me.clone())
+                .task_id(task_id.clone())
+                .exit_code(exit_code.unwrap_or(0))
+                .stdout(stdout.unwrap_or_default())
+                .stderr(stderr.unwrap_or_default())
+                .output_contexts(output_contexts)
+                .error(error.unwrap_or_default())
+                .into_message()?,
+        )
+        .await?;
     Ok(())
 }
