@@ -1,6 +1,6 @@
 [package]
 name = "gvltctl"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 authors = ["Gevulot Team"]
 license = "MIT OR Apache-2.0"
@@ -11,7 +11,7 @@ description = "Gevulot Control CLI"
 # TODO: change rev to tag when available
 # NOTE: this revision is aligned with `mia-installer` dependency.
 # Be careful changing it.
-gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", rev = "f6657f57771b1c549a83cfe6fc822c3db687707e" }
+gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", rev = "0b3c05e34c7680c2dd3ef6caaf27b2f96bca279d" }
 
 bip32 = "0.5.1"
 clap = { version = "4", features = ["env", "cargo"] }
@@ -26,7 +26,8 @@ tokio = { version = "1", features = ["full"] }
 toml = "0.8.19"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", tag = "mia-installer-0.2.3" }
+mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", rev = "026b84dbe7c3fcc9e0ec644c59a7b7123738104e" }
+#mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", tag = "mia-installer-0.2.3" }
 
 anyhow = "1"
 log = "0.4.22"

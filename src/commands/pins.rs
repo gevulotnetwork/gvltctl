@@ -30,8 +30,8 @@ pub async fn list_pins(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::err
 /// * `_sub_m` - A reference to the ArgMatches struct containing parsed command-line arguments.
 ///              This is used to access the CID of the pin to retrieve and any additional options.
 pub async fn get_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = connect_to_gevulot(_sub_m).await?;
     if let Some(pin_cid) = _sub_m.get_one::<String>("cid") {
+        let mut client = connect_to_gevulot(_sub_m).await?;
         let pin = client.pins.get(pin_cid).await?;
         // Convert the pin to the gevulot_rs::models::Pin type
         let pin: gevulot_rs::models::Pin = pin.into();
@@ -85,10 +85,13 @@ pub async fn create_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::er
         .await?;
 
     // Replace println with print_object for consistent formatting
-    print_object(_sub_m, &serde_json::json!({
-        "status": "success",
-        "message": format!("Created pin with CID: {}", &pin.spec.cid)
-    }))?;
+    print_object(
+        _sub_m,
+        &serde_json::json!({
+            "status": "success",
+            "message": format!("Created pin with CID: {}", &pin.spec.cid.unwrap_or("".to_string())),
+        }),
+    )?;
     Ok(())
 }
 
@@ -127,9 +130,12 @@ pub async fn delete_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::er
         .await?;
 
     // Use print_object for consistent formatting
-    print_object(_sub_m, &serde_json::json!({
-        "status": "success",
-        "message": format!("Deleted pin with CID: {}", pin_cid)
-    }))?;
+    print_object(
+        _sub_m,
+        &serde_json::json!({
+            "status": "success",
+            "message": format!("Deleted pin with CID: {}", pin_cid)
+        }),
+    )?;
     Ok(())
 }
