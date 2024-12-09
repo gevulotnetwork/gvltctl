@@ -1,6 +1,6 @@
 # From https://github.com/BurntSushi/ripgrep/blob/master/.github/workflows/release.yml
 
-name: release
+name: Release
 
 on:
   workflow_dispatch:
@@ -16,6 +16,9 @@ jobs:
   create-release:
     name: create-release
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -30,7 +33,6 @@ jobs:
         run: |
           echo "version is: $VERSION"
       - name: Check that tag version and Cargo.toml version are the same
-        shell: bash
         run: |
           VERSION=${VERSION#v} # strip leading v if present only for the Cargo.toml check
           if ! grep -q "version = \"$VERSION\"" Cargo.toml; then
@@ -50,6 +52,9 @@ jobs:
     name: build-release
     needs: ['create-release']
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     env:
       # For some builds, we use cross to test on 32-bit and big-endian
       # systems.
@@ -72,25 +77,23 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - build: stable-x86
+        - build: ubuntu-x86
           os: ubuntu-latest
           rust: stable
           target: x86_64-unknown-linux-gnu
-          qemu: i386
-        - build: stable-aarch64
+        - build: ubuntu-aarch64
           os: ubuntu-latest
           rust: stable
           target: aarch64-unknown-linux-gnu
           strip: aarch64-linux-gnu-strip
-          qemu: qemu-aarch64
-        # - build: macos
-        #   os: macos-latest
-        #   rust: nightly
-        #   target: x86_64-apple-darwin
-        # - build: win-msvc
-        #   os: windows-latest
-        #   rust: nightly
-        #   target: x86_64-pc-windows-msvc
+        - build: macos-x86
+          os: macos-latest
+          rust: stable
+          target: x86_64-apple-darwin
+        - build: macos-aarch64
+          os: macos-latest
+          rust: stable
+          target: aarch64-apple-darwin
 
     steps:
     - name: Checkout repository
@@ -98,7 +101,6 @@ jobs:
 
     - name: Install packages (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
-      shell: bash
       run: |-
           sudo apt-get update
           sudo apt-get install -y openssl ca-certificates pkg-config cmake libssl-dev
@@ -110,11 +112,9 @@ jobs:
         brew install openssl pkg-config cmake
 
     - name: Install buf
-      if: matrix.os == 'ubuntu-latest'
       uses: bufbuild/buf-setup-action@v1
 
     - name: Install Protoc
-      if: matrix.os == 'ubuntu-latest'
       uses: arduino/setup-protoc@v3
 
     - name: Install Rust
@@ -125,7 +125,6 @@ jobs:
 
     - name: Use Cross
       if: matrix.os == 'ubuntu-latest' && matrix.target != ''
-      shell: bash
       run: |
         # In the past, new releases of 'cross' have broken CI. So for now, we
         # pin it. We also use their pre-compiled binary releases because cross
@@ -139,20 +138,17 @@ jobs:
         echo "CARGO=cross" >> $GITHUB_ENV
 
     - name: Set target variables
-      shell: bash
       run: |
         echo "TARGET_FLAGS=--target ${{ matrix.target }}" >> $GITHUB_ENV
         echo "TARGET_DIR=./target/${{ matrix.target }}" >> $GITHUB_ENV
 
     - name: Show command used for Cargo
-      shell: bash
       run: |
         echo "cargo command is: ${{ env.CARGO }}"
         echo "target flag is: ${{ env.TARGET_FLAGS }}"
         echo "target dir is: ${{ env.TARGET_DIR }}"
 
     - name: Build release binary
-      shell: bash
       run: |
         ${{ env.CARGO }} build --bin gvltctl --verbose --release ${{ env.TARGET_FLAGS }}
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
@@ -164,12 +160,10 @@ jobs:
 
     - name: Strip release binary (macos)
       if: matrix.os == 'macos-latest'
-      shell: bash
       run: strip "$BIN"
 
     - name: Strip release binary (cross)
       if: env.CARGO == 'cross' && matrix.strip != ''
-      shell: bash
       run: |
         docker run --rm -v \
           "$PWD/target:/target:Z" \
@@ -179,24 +173,20 @@ jobs:
 
     - name: Strip release binary (native strip)
       if: matrix.os != 'macos-latest' && matrix.strip == ''
-      shell: bash
       run: strip "$BIN"
 
     - name: Determine archive name
-      shell: bash
       run: |
         version="${{ needs.create-release.outputs.version }}"
         echo "ARCHIVE=gvltctl-${{ matrix.target }}" >> $GITHUB_ENV
 
     - name: Creating directory for archive
-      shell: bash
       run: |
         mkdir -p "$ARCHIVE"
         cp "$BIN" "$ARCHIVE"/
         cp README.md "$ARCHIVE"/
 
     - name: Build archive (Windows)
-      shell: bash
       if: matrix.os == 'windows-latest'
       run: |
         7z a "$ARCHIVE.zip" "$ARCHIVE"
@@ -205,7 +195,6 @@ jobs:
         echo "ASSET_SUM=$ARCHIVE.zip.sha256" >> $GITHUB_ENV
 
     - name: Build archive (Unix)
-      shell: bash
       if: matrix.os != 'windows-latest'
       run: |
         tar czf "$ARCHIVE.tar.gz" "$ARCHIVE"
@@ -216,7 +205,6 @@ jobs:
     - name: Upload release archive
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      shell: bash
       run: |
         release_name="v${{ needs.create-release.outputs.version }}"
         gh release upload "$release_name" ${{ env.ASSET }} ${{ env.ASSET_SUM }}
