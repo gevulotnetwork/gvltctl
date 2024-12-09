@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context, Result};
-use log::{debug, info};
-use std::path::{Path, PathBuf};
-use std::{fmt, fs};
 use bytesize::ByteSize;
+use log::{debug, info};
+use std::path::{self, Path, PathBuf};
+use std::{fmt, fs};
 
 use crate::builders::Step;
 
@@ -192,17 +192,19 @@ impl Step<LinuxVMBuildContext> for Install {
             .get::<PathBuf>("mountpoint")
             .ok_or(anyhow!("cannot install kernel: mount point not found"))?;
 
-        let kernel_path = mountpoint.join("bzImage");
-        match fs::copy(kernel.path(), &kernel_path) {
-            Err(err) => {
-                return Err(err).context("kernel installation failed");
-            }
-            Ok(installed_size) => {
-                log::trace!("installed {} bytes", installed_size);
-            }
-        }
+        // Just hardcoded for now
+        let installed_kernel_relative = PathBuf::from("bzImage");
 
-        ctx.0.set("installed_kernel", Box::new(kernel_path));
+        let kernel_path = mountpoint.join(&installed_kernel_relative);
+        fs::copy(kernel.path(), &kernel_path).context("kernel installation failed")?;
+
+        let installed_kernel = Path::new(path::MAIN_SEPARATOR_STR).join(installed_kernel_relative);
+        debug!(
+            "kernel installed to {}:{}",
+            ctx.opts().image_path.display(),
+            installed_kernel.display()
+        );
+        ctx.0.set("installed_kernel", Box::new(installed_kernel));
 
         Ok(())
     }

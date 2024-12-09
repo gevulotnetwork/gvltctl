@@ -121,17 +121,12 @@ impl MountHandler for FuseMount {
     }
 
     fn unmount_no_drop(&self) -> Result<()> {
-        let mut umount_args = vec![OsStr::new("umount"), self.mountpoint.path().as_os_str()];
-        match run_command([OsStr::new("lsof"), self.mountpoint.path().as_os_str()]) {
-            Ok(_) => {
-                trace!("umount target is busy, performing lazy umount");
-                umount_args.insert(1, OsStr::new("--lazy"));
-            }
-            Err(_) => {
-                trace!("umount target is not busy");
-            }
-        }
-        run_command(&umount_args).context("unmounting filesystem")?;
+        run_command(&[
+            OsStr::new("umount"),
+            OsStr::new("--lazy"),
+            self.mountpoint.path().as_os_str(),
+        ])
+        .context("unmounting filesystem failed")?;
         Ok(())
     }
 }

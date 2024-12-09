@@ -21,9 +21,6 @@ pub struct Ext4 {
 }
 
 impl Ext4 {
-    /// EXT4 block size.
-    pub const BLOCK_SIZE: u64 = 0x1000;
-
     pub fn new(path: PathBuf, offset: u64) -> Self {
         Self { path, offset }
     }
@@ -55,21 +52,6 @@ impl Ext4 {
         Ok(Self { path, offset })
     }
 
-    /// Check filesystem.
-    pub fn check(&self) -> Result<()> {
-        let mut target = self.path.as_os_str().to_os_string();
-        target.push(OsStr::new(&format!("?offset={}", self.offset)));
-        debug!("checking filesystem on {}", target.to_string_lossy());
-        run_command([
-            OsStr::new("e2fsck"),
-            OsStr::new("-f"),
-            OsStr::new("-n"),
-            target.as_os_str(),
-        ])
-        .context("filesystem check failed")?;
-        Ok(())
-    }
-
     /// Get current writable free space of filesystem in bytes.
     pub fn free_space(&self) -> Result<u64> {
         let (output, _) = run_command([
@@ -96,25 +78,6 @@ impl Ext4 {
         Ok(free_blocks * block_size)
     }
 
-    /// Resize filesystem. `new_size` is given in bytes.
-    pub fn resize(&self, new_size: u64) -> Result<()> {
-        // Size of the filesystem in blocks (rounded to floor)
-        let size = new_size / Self::BLOCK_SIZE;
-        let mut target = self.path.as_os_str().to_os_string();
-        target.push(OsStr::new(&format!("?offset={}", self.offset)));
-
-        run_command([
-            OsStr::new("resize2fs"),
-            // avoid checks
-            OsStr::new("-f"),
-            // path
-            &target,
-            // fs size
-            OsStr::new(size.to_string().as_str()),
-        ])?;
-        Ok(())
-    }
-
     /// Copy file from source to destination.
     pub fn copy_file<P, Q>(&self, source: P, destination: Q) -> Result<u64>
     where
@@ -126,12 +89,58 @@ impl Ext4 {
 }
 
 impl FileSystemHandler for Ext4 {
+    const BLOCK_SIZE: u64 = 0x1000;
+
     fn offset(&self) -> u64 {
         self.offset
     }
 
     fn path(&self) -> &Path {
         self.path.as_path()
+    }
+
+    /// Run filesystem check.
+    ///
+    /// Wrapper for `e2fsck -f -n IMAGE?offset=OFFSET`
+    fn check(&self) -> Result<()> {
+        let mut target = self.path.as_os_str().to_os_string();
+        target.push(OsStr::new(&format!("?offset={}", self.offset)));
+        debug!("checking filesystem on {}", target.to_string_lossy());
+        run_command([
+            OsStr::new("e2fsck"),
+            OsStr::new("-f"),
+            OsStr::new("-n"),
+            target.as_os_str(),
+        ])
+        .context("filesystem check failed")?;
+        Ok(())
+    }
+
+    /// Resize filesystem.
+    ///
+    /// `new_size` - new size of the filesystem in blocks.
+    ///
+    /// Wrapper for `resize2fs IMAGE?offset=OFFSET NEW_SIZE`.
+    fn resize(&self, new_size: u64) -> Result<()> {
+        // TODO:
+        // copy file without first sector
+        // resize2fs
+        // bring first sector back
+
+        // Size of the filesystem in blocks (rounded to floor)
+        let mut target = self.path.as_os_str().to_os_string();
+        target.push(OsStr::new(&format!("?offset={}", self.offset)));
+
+        run_command([
+            OsStr::new("resize2fs"),
+            // avoid checks
+            OsStr::new("-f"),
+            // path
+            &target,
+            // fs size
+            // OsStr::new(new_size.to_string().as_str()),
+        ])?;
+        Ok(())
     }
 }
 

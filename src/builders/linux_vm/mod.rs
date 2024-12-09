@@ -151,7 +151,7 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
     }
 
     // Resize VM image before filling it with the content if needed.
-    steps.push(Box::new(resize::ResizeAll));
+    steps.push(Box::new(resize::ResizeAll::<filesystem::Ext4>::new()));
 
     if ctx.opts().fuse {
         steps.push(Box::new(mount::fuse::MountFileSystem));

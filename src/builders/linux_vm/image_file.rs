@@ -16,9 +16,6 @@ use super::LinuxVMBuildContext;
 pub struct ImageFile {
     /// Path to the file.
     path: PathBuf,
-
-    /// Current size of the file.
-    size: ByteSize,
 }
 
 impl ImageFile {
@@ -27,22 +24,24 @@ impl ImageFile {
     where
         P: AsRef<Path>,
     {
-        if path.as_ref().exists() && !overwrite {
-            bail!("Output file '{}' already exists.", path.as_ref().display());
+        if path.as_ref().exists() {
+            if overwrite {
+                fs::remove_file(&path).context("failed to remove image file")?;
+            } else {
+                bail!("Output file '{}' already exists.", path.as_ref().display());
+            }
         }
-        let mut file = File::create(&path).context("failed to create image file")?;
+        let mut file = File::create_new(&path).context("failed to create image file")?;
 
         // This will create sparse file on Linux
         // TODO: research this on other platforms
-        let size = file
-            .seek(SeekFrom::Start(size.as_u64() - 1))
+        file.seek(SeekFrom::Start(size.as_u64() - 1))
             .context("seek for image size")?;
         file.write_all(&[0])
             .context("failed to extend image file")?;
 
         Ok(Self {
             path: path.as_ref().to_path_buf(),
-            size: ByteSize::b(size),
         })
     }
 
@@ -55,10 +54,9 @@ impl ImageFile {
         if path.as_ref().exists() && !overwrite {
             bail!("Output file '{}' already exists.", path.as_ref().display());
         }
-        let size = fs::copy(source.as_ref(), path.as_ref()).context("failed to copy image file")?;
+        fs::copy(source.as_ref(), path.as_ref()).context("failed to copy image file")?;
         Ok(Self {
             path: path.as_ref().to_path_buf(),
-            size: ByteSize::b(size),
         })
     }
 
@@ -69,8 +67,7 @@ impl ImageFile {
             .open(&self.path)
             .context("failed to open image file")?;
 
-        let current_size = self.size;
-        self.size = current_size + value;
+        let current_size = self.size()?;
 
         ByteSize::b(
             file.seek(SeekFrom::Current(value.0 as i64 - 1))
@@ -84,7 +81,7 @@ impl ImageFile {
 
     /// Delete image file.
     pub fn delete(self) -> Result<()> {
-        std::fs::remove_file(self.path).map_err(Into::into)
+        fs::remove_file(self.path).map_err(Into::into)
     }
 
     /// Path to file.
@@ -93,8 +90,9 @@ impl ImageFile {
     }
 
     /// Current size of the file.
-    pub fn size(&self) -> ByteSize {
-        self.size
+    pub fn size(&self) -> Result<ByteSize> {
+        let meta = fs::metadata(&self.path).context("failed to get image file metadata")?;
+        Ok(ByteSize::b(meta.len()))
     }
 }
 
@@ -124,7 +122,7 @@ impl Step<LinuxVMBuildContext> for CreateImageFile {
         debug!(
             "image file created: {} ({})",
             &image_file,
-            image_file.size()
+            image_file.size()?
         );
         ctx.0.set("image_file", Box::new(image_file));
         Ok(())
@@ -153,7 +151,11 @@ impl Step<LinuxVMBuildContext> for UseImageFile {
         debug!("base image file: {}", self.base_image.display());
         let image_file =
             ImageFile::from_existing(&self.base_image, &ctx.opts().image_path, ctx.opts().force)?;
-        debug!("image file copied: {} ({})", &image_file, image_file.size());
+        debug!(
+            "image file copied: {} ({})",
+            &image_file,
+            image_file.size()?
+        );
         ctx.0.set("image_file", Box::new(image_file));
         Ok(())
     }

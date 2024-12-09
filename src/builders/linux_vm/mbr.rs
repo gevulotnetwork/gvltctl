@@ -9,11 +9,6 @@ use crate::builders::Step;
 use super::image_file::ImageFile;
 use super::LinuxVMBuildContext;
 
-const DISK_SIGNATURE: [u8; 4] = [b'G', b'V', b'L', b'T'];
-const SECTOR_SIZE: u32 = 512;
-const ALIGN: u32 = 1;
-const BOOTCODE_SIZE: usize = 440;
-
 /// Master Boot Record handler.
 #[derive(Clone, Debug)]
 pub struct Mbr {
@@ -22,15 +17,20 @@ pub struct Mbr {
 }
 
 impl Mbr {
+    pub const DISK_SIGNATURE: [u8; 4] = [b'G', b'V', b'L', b'T'];
+    pub const SECTOR_SIZE: u32 = 512;
+    pub const ALIGN: u32 = 1;
+    pub const BOOTCODE_SIZE: usize = 440;
+
     /// Create new MBR for given file with a single partition for the whole drive.
     ///
     /// File size is given in bytes. If the size is not divisable by sector size, disk size will be
     /// rounded to floor.
     pub fn new(path: PathBuf, file_size: u64) -> Result<Self> {
-        let mut header = MBRHeader::new(DISK_SIGNATURE);
+        let mut header = MBRHeader::new(Self::DISK_SIGNATURE);
 
         // Size of the disk in sectors
-        let disk_size = (file_size / SECTOR_SIZE as u64)
+        let disk_size = (file_size / Self::SECTOR_SIZE as u64)
             .try_into()
             .map_err(|_| anyhow!("disk size is too big (max supported by MBR is 2 TiB)"))?;
 
@@ -47,10 +47,10 @@ impl Mbr {
         };
 
         let mbr_desc = mbrman::MBR {
-            sector_size: SECTOR_SIZE,
+            sector_size: Self::SECTOR_SIZE,
             header,
             logical_partitions: Vec::new(),
-            align: ALIGN,
+            align: Self::ALIGN,
             cylinders: 0,
             heads: 0,
             sectors: 0,
@@ -68,7 +68,7 @@ impl Mbr {
     /// Read MBR from file.
     pub fn from_file(path: PathBuf) -> Result<Self> {
         let mut f = fs::File::open(&path).context("failed to open disk image file")?;
-        let mbr = mbrman::MBR::read_from(&mut f, SECTOR_SIZE)
+        let mbr = mbrman::MBR::read_from(&mut f, Self::SECTOR_SIZE)
             .context("failed to read MBR from disk image")?;
         Ok(Self { mbr, path })
     }
@@ -96,7 +96,7 @@ impl Mbr {
     }
 
     /// Write MBR bootcode to the disk image.
-    pub fn write_bootcode(&mut self, bootcode: [u8; BOOTCODE_SIZE]) -> Result<()> {
+    pub fn write_bootcode(&mut self, bootcode: [u8; Self::BOOTCODE_SIZE]) -> Result<()> {
         self.mbr.header.bootstrap_code = bootcode;
         self.write()
     }
@@ -105,7 +105,7 @@ impl Mbr {
     /// Changes are written to disk.
     /// `extend` is given in bytes.
     pub fn extend_partition(&mut self, extend: u64) -> Result<()> {
-        let extend: u32 = (extend / SECTOR_SIZE as u64)
+        let extend: u32 = (extend / Self::SECTOR_SIZE as u64)
             .try_into()
             .map_err(|_| anyhow!("disk size too big"))?;
         self.mbr.disk_size += extend;

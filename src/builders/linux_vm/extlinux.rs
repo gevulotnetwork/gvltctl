@@ -20,7 +20,7 @@ const BOOTCODE: &[u8; 440] = include_bytes!(concat!(
 ));
 
 /// EXTLINUX wrapper.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Extlinux {
     directory: PathBuf,
 }
@@ -64,7 +64,7 @@ impl Extlinux {
 
     /// Install EXTLINUX config file.
     pub fn install_config(&self, mountpoint: &Path, cfg: &str) -> Result<()> {
-        let cfg_path = mountpoint.join(self.directory_relative()?);
+        let cfg_path = mountpoint.join(self.directory_relative()?).join("extlinux.conf");
         let mut file =
             fs::File::create_new(&cfg_path).context("failed to create EXTLINUX config file")?;
         file.write_all(cfg.as_bytes())
@@ -95,7 +95,7 @@ impl Step<LinuxVMBuildContext> for InstallExtlinux {
 
         debug!("writing MBR bootcode");
         mbr.write_bootcode(BOOTCODE.clone())
-            .context("write MBR bootcode")?;
+            .context("failed to write MBR bootcode")?;
 
         ctx.0.set("extlinux", Box::new(extlinux));
         Ok(())
@@ -109,9 +109,7 @@ impl Step<LinuxVMBuildContext> for InstallExtlinuxCfg {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         info!("installing EXTLINUX config");
 
-        let extlinux = ctx.0.get::<Extlinux>("extlinux").ok_or(anyhow!(
-            "cannot install EXTLINUX config: extlinux not found"
-        ))?;
+        let extlinux = ctx.0.get::<Extlinux>("extlinux").cloned().unwrap_or_default();
 
         let mountpoint = ctx.0.get::<PathBuf>("mountpoint").ok_or(anyhow!(
             "cannot install EXTLINUX config: mount point not found"
@@ -130,12 +128,12 @@ LABEL linux
     LINUX {}
     APPEND root=/dev/sda1 ro console=ttyS0 init=/bin/testapp
 "#,
-            installed_kernel.to_str().ok_or(anyhow!("non-UTF-8 path"))?
+            installed_kernel.to_str().ok_or(anyhow!("non-UTF-8 path to installed kernel"))?
         );
 
         extlinux
             .install_config(mountpoint, cfg.as_str())
-            .context("install EXTLINUX config")?;
+            .context("failed to install EXTLINUX config")?;
 
         Ok(())
     }
