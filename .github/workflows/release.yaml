@@ -210,5 +210,5 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        release_name="v${{ needs.create-release.outputs.version }}"
+        release_name="${{ needs.create-release.outputs.version }}"
         gh release upload "$release_name" ${{ env.ASSET }} ${{ env.ASSET_SUM }}
