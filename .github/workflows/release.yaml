@@ -103,6 +103,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y openssl ca-certificates pkg-config cmake libssl-dev
 
+    - name: Install packages (MacOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew update
+        brew install openssl pkg-config cmake
+
     - name: Install buf
       if: matrix.os == 'ubuntu-latest'
       uses: bufbuild/buf-setup-action@v1
