@@ -113,9 +113,13 @@ jobs:
 
     - name: Install buf
       uses: bufbuild/buf-setup-action@v1
+      with:
+        github_token: ${{ github.token }}
 
     - name: Install Protoc
       uses: arduino/setup-protoc@v3
+      with:
+        repo-token: ${{ github.token }}
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
