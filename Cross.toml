@@ -1,0 +1,3 @@
+[build]
+pre-build = "./scripts/cross/pre-build-script.sh"
+env.passthrough = ["BUF_CACHE_DIR=/tmp"]
