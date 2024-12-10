@@ -73,6 +73,8 @@ jobs:
       PCRE2_SYS_STATIC: 1
       # To ensure openssl is static linked
       OPENSSL_STATIC: 1
+      # Build static
+      RUSTFLAGS: "-C target-feature=+crt-static"
     strategy:
       fail-fast: false
       matrix:
