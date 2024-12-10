@@ -44,6 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(("get", sub_m)) => get_pin(sub_m).await?,
             Some(("create", sub_m)) => create_pin(sub_m).await?,
             Some(("delete", sub_m)) => delete_pin(sub_m).await?,
+            Some(("ack", sub_m)) => ack_pin(sub_m).await?,
             _ => println!("Unknown pin command"),
         },
         Some(("task", sub_m)) => match sub_m.subcommand() {
@@ -201,6 +202,19 @@ fn setup_command_line_args() -> Result<Command, Box<dyn std::error::Error>> {
                             Arg::new("cid")
                                 .value_name("CID")
                                 .help("The CID of the pin to retrieve")
+                                .value_hint(ValueHint::Other)
+                                .required(true)
+                                .index(1),
+                        )
+                        .args(&chain_args),
+                )
+                .subcommand(
+                    Command::new("ack")
+                        .about("Ack a pin")
+                        .arg(
+                            Arg::new("cid")
+                                .value_name("CID")
+                                .help("The CID of the pin to ack")
                                 .value_hint(ValueHint::Other)
                                 .required(true)
                                 .index(1),
