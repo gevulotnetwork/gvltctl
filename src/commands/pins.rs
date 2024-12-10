@@ -1,4 +1,4 @@
-use gevulot_rs::builders::{ByteSize, ByteUnit, MsgCreatePinBuilder, MsgDeletePinBuilder};
+use gevulot_rs::builders::{ByteSize, ByteUnit, MsgCreatePinBuilder, MsgDeletePinBuilder, MsgAckPinBuilder};
 
 use crate::{connect_to_gevulot, print_object, read_file};
 
@@ -39,6 +39,36 @@ pub async fn get_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error
     } else {
         println!("Pin CID is required");
     }
+    Ok(())
+}
+
+pub async fn ack_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = connect_to_gevulot(_sub_m).await?;
+    let me = client
+        .base_client
+        .write()
+        .await
+        .address
+        .clone()
+        .ok_or("No address found, did you set a mnemonic?")?;
+    let pin_id = _sub_m.get_one::<String>("id").ok_or("Pin ID is required")?;
+    let pin_cid = _sub_m
+        .get_one::<String>("cid")
+        .ok_or("Pin CID is required")?;
+    let worker_id = _sub_m.get_one::<String>("worker_id").ok_or("Worker ID is required")?;
+    let success = _sub_m.get_flag("success");
+    client
+        .pins
+        .ack(
+            MsgAckPinBuilder::default()
+                .id(pin_id.clone())
+                .creator(me.clone())
+                .cid(pin_cid.clone())
+                .worker_id(worker_id.clone())
+                .success(success)
+                .into_message()?,
+        )
+        .await?;
     Ok(())
 }
 
