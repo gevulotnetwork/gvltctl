@@ -155,7 +155,7 @@ jobs:
 
     - name: Build release binary
       run: |
-        ${{ env.CARGO }} build --bin gvltctl --verbose --release ${{ env.TARGET_FLAGS }}
+        ${{ env.CARGO }} build --bin gvltctl --verbose --release --features openssl-vendored ${{ env.TARGET_FLAGS }}
         if [ "${{ matrix.os }}" = "windows-latest" ]; then
           bin="target/${{ matrix.target }}/release/gvltctl.exe"
         else
