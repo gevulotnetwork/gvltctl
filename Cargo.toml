@@ -21,6 +21,11 @@ serde_json = "1"
 serde_yaml = "0.9.34"
 tokio = { version = "1", features = ["full"] }
 toml = "0.8.19"
+openssl = { version = "*", optional = true }
+
+[features]
+# This feature should be enabled when building static executable
+openssl-vendored = ["openssl/vendored"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", tag = "mia-installer-0.2.5"}
