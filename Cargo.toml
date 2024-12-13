@@ -8,8 +8,7 @@ repository = "https://github.com/gevulotnetwork/gvltctl"
 description = "Gevulot Control CLI"
 
 [dependencies]
-# gevulot-rs = "0.1.3-pre.3"
-gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", rev = "e4094641c487da48af5bd1b49c2bac50a48b21e7" }
+gevulot-rs = "0.1.3-pre.3"
 
 bip32 = "0.5.1"
 clap = { version = "4", features = ["env", "cargo"] }
@@ -37,3 +36,6 @@ num_cpus = "1.16.0"
 oci-spec = "0.7.0"
 tempdir = "0.3.7"
 thiserror = "1"
+
+[patch.crates-io]
+gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", rev = "e4094641c487da48af5bd1b49c2bac50a48b21e7" }
