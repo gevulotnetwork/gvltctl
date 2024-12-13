@@ -19,6 +19,8 @@ mod commands;
 use commands::build::*;
 use commands::{pins::*, sudo::*, tasks::*, workers::*};
 
+shadow_rs::shadow!(build_info);
+
 /// Main entry point for the Gevulot Control CLI application.
 ///
 /// This function sets up the command-line interface, parses arguments,
@@ -141,6 +143,25 @@ fn setup_command_line_args() -> Result<Command, Box<dyn std::error::Error>> {
 
     #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
     let mut command = clap::command!()
+        .long_version(format!(
+            "{} ({})\nplatform: {}",
+            build_info::PKG_VERSION,
+            if build_info::GIT_CLEAN {
+                format!(
+                    "{} {}",
+                    if build_info::TAG.is_empty() {
+                        build_info::SHORT_COMMIT
+                    } else {
+                        build_info::TAG
+                    },
+                    // Strip commit time and leave only date
+                    build_info::COMMIT_DATE.split(' ').collect::<Vec<_>>()[0],
+                )
+            } else {
+                format!("{}-dirty", build_info::SHORT_COMMIT)
+            },
+            build_info::BUILD_TARGET,
+        ))
         .subcommand_required(true)
         // Worker subcommand
         .subcommand(
