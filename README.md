@@ -38,13 +38,18 @@ Supported platforms:
 
 ### Compiling from sources
 
+To compile `gvltclt` crate you will need following dependencies:
+
+- [`protoc`](https://grpc.io/docs/protoc-installation/)
+- [`buf`](https://buf.build/docs/installation/)
+
 ```shell
 cargo install --git https://github.com/gevulotnetwork/gvltctl.git --tag $VERSION
 ```
 
 ## Usage
 
-```shell
+```plain
 $ gvltctl --help
 Gevulot Control CLI
 
