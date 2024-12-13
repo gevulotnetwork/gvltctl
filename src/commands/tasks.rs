@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use gevulot_rs::builders::{
-    ByteSize, ByteUnit, MsgAcceptTaskBuilder, MsgCreateTaskBuilder, MsgDeclineTaskBuilder, MsgFinishTaskBuilder,
+    ByteSize, ByteUnit, MsgAcceptTaskBuilder, MsgCreateTaskBuilder, MsgDeclineTaskBuilder,
+    MsgFinishTaskBuilder,
 };
 
 use crate::{connect_to_gevulot, print_object, read_file};
@@ -199,7 +200,7 @@ pub async fn finish_task(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::e
         .into_iter()
         .map(|e| e.to_string())
         .collect();
-    
+
     client
         .tasks
         .finish(
@@ -207,10 +208,14 @@ pub async fn finish_task(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::e
                 .creator(me.clone())
                 .task_id(task_id.clone())
                 .exit_code(exit_code.unwrap_or(0))
-                .stdout(stdout.unwrap_or_default())
-                .stderr(stderr.unwrap_or_default())
-                .output_contexts(output_contexts)
-                .error(error.unwrap_or_default())
+                .stdout(stdout)
+                .stderr(stderr)
+                .output_contexts(if output_contexts.is_empty() {
+                    None
+                } else {
+                    Some(output_contexts)
+                })
+                .error(error)
                 .into_message()?,
         )
         .await?;
