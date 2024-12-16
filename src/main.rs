@@ -1,4 +1,5 @@
 use bip32::{Mnemonic, Prefix, XPrv};
+use cargo_metadata::Metadata;
 use clap::ArgAction;
 use clap::{value_parser, Arg, Command, ValueHint};
 use clap_complete::{generate, Shell};
@@ -7,7 +8,7 @@ use gevulot_rs::gevulot_client::GevulotClientBuilder;
 use gevulot_rs::GevulotClient;
 use rand_core::OsRng;
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{self, Read, Write};
 
@@ -18,6 +19,8 @@ mod commands;
 #[cfg(target_os = "linux")]
 use commands::build::*;
 use commands::{pins::*, sudo::*, tasks::*, workers::*};
+
+shadow_rs::shadow!(build_info);
 
 /// Main entry point for the Gevulot Control CLI application.
 ///
@@ -82,6 +85,68 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Get gevulot-rs dependency version from cargo metadata.
+fn get_gevulot_rs_version(metadata: &Metadata) -> Option<String> {
+    const GEVULOT_RS_NAME: &str = "gevulot-rs";
+    let gvltctl = metadata.root_package()?;
+    let gevulot_rs_dep = gvltctl
+        .dependencies
+        .iter()
+        .find(|dep| &dep.name == GEVULOT_RS_NAME)?;
+
+    if let Some(path) = gevulot_rs_dep.path.as_ref() {
+        Some(format!(
+            "{} ({})",
+            metadata
+                .packages
+                .iter()
+                .find(|package| {
+                    &package.name == GEVULOT_RS_NAME && package.id.repr.starts_with("path")
+                })?
+                .version,
+            path.as_str()
+        ))
+    } else if gevulot_rs_dep
+        .source
+        .as_ref()
+        .is_some_and(|src| src.starts_with("git"))
+    {
+        metadata.packages.iter().find_map(|package| {
+            if &package.name == GEVULOT_RS_NAME {
+                package
+                    .id
+                    .repr
+                    .strip_prefix("git+")?
+                    .split('#')
+                    .collect::<Vec<_>>()
+                    .get(0)
+                    .map(|id| format!("{} ({})", package.version, id))
+            } else {
+                None
+            }
+        })
+    } else if gevulot_rs_dep
+        .source
+        .as_ref()
+        .is_some_and(|src| src.starts_with("registry"))
+    {
+        metadata.packages.iter().find_map(|package| {
+            if &package.name == GEVULOT_RS_NAME
+                && package
+                    .source
+                    .as_ref()
+                    .is_some_and(cargo_metadata::Source::is_crates_io)
+            {
+                Some(package.version.to_string())
+            } else {
+                None
+            }
+        })
+    } else {
+        return None;
+    }
+}
+
 /// Parses command-line arguments and returns the matches.
 ///
 /// This function sets up the entire command-line interface structure,
@@ -139,8 +204,38 @@ fn setup_command_line_args() -> Result<Command, Box<dyn std::error::Error>> {
             .action(ArgAction::Set),
     ];
 
+    let gevulot_rs_version =
+        serde_json::from_slice::<serde_json::Value>(&build_info::CARGO_METADATA)
+            .ok()
+            .map(Metadata::deserialize)
+            .map(Result::ok)
+            .flatten()
+            .as_ref()
+            .map(get_gevulot_rs_version)
+            .flatten();
+
     #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
     let mut command = clap::command!()
+        .long_version(format!(
+            "{} ({})\ngevulot-rs {}\nplatform: {}",
+            build_info::PKG_VERSION,
+            if build_info::GIT_CLEAN {
+                format!(
+                    "{} {}",
+                    if build_info::TAG.is_empty() {
+                        build_info::SHORT_COMMIT
+                    } else {
+                        build_info::TAG
+                    },
+                    // Strip commit time and leave only date
+                    build_info::COMMIT_DATE.split(' ').collect::<Vec<_>>()[0],
+                )
+            } else {
+                format!("{}-dirty", build_info::SHORT_COMMIT)
+            },
+            gevulot_rs_version.unwrap_or_else(|| "unknown".to_string()),
+            build_info::BUILD_TARGET,
+        ))
         .subcommand_required(true)
         // Worker subcommand
         .subcommand(

@@ -19,10 +19,13 @@ COPY Cargo.lock .
 RUN cargo build --release
 
 # Copy the source code and build script
-COPY src ./src
+ADD . .
 
 # Build the project
 RUN cargo build --release && cp target/release/gvltctl /gvltctl-bin
+
+# FIXME: gvltctl --version here will always report empty build info,
+# because there is no .git/ in the container.
 
 # Use a minimal base image for the final stage
 FROM debian:bullseye-slim
