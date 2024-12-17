@@ -526,9 +526,129 @@ impl SkopeoSyslinuxBuilder {
             std::env::set_current_dir(&kernel_dir)
                 .context("Failed to change to kernel directory")?;
 
-            // Configure and build the kernel
+            // Configure the kernel
             Self::run_command(&["make", "x86_64_defconfig"], false)
                 .context("Failed to configure kernel")?;
+
+            // SQUASHFS support
+            Self::run_command(&["scripts/config", "--enable", "CONFIG_SQUASHFS"], false)
+                .context("Failed to enable CONFIG_SQUASHFS flag to kernel config ")?;
+
+            Self::run_command(
+                &["scripts/config", "--disable", "CONFIG_SQUASHFS_FILE_CACHE"],
+                false,
+            )
+            .context("Failed to disable CONFIG_SQUASHFS_FILE_CACHE flag to kernel config ")?;
+
+            Self::run_command(
+                &["scripts/config", "--enable", "CONFIG_SQUASHFS_FILE_DIRECT"],
+                false,
+            )
+            .context("Failed to enable CONFIG_SQUASHFS_FILE_DIRECT flag to kernel config")?;
+
+            Self::run_command(
+                &[
+                    "scripts/config",
+                    "--enable",
+                    "CONFIG_SQUASHFS_DECOMP_SINGLE",
+                ],
+                false,
+            )
+            .context("Failed to enable CONFIG_SQUASHFS_DECOMP_SINGLE flag to kernel config")?;
+
+            Self::run_command(
+                &["scripts/config", "--enable", "CONFIG_SQUASHFS_DECOMP_MULTI"],
+                false,
+            )
+            .context("Failed to enable CONFIG_SQUASHFS_DECOMP_MULTI flag to kernel config")?;
+
+            Self::run_command(
+                &[
+                    "scripts/config",
+                    "--enable",
+                    "CONFIG_SQUASHFS_DECOMP_MULTI_PERCPU",
+                ],
+                false,
+            )
+            .context(
+                "Failed to enable CONFIG_SQUASHFS_DECOMP_MULTI_PERCPU flag to kernel config",
+            )?;
+
+            Self::run_command(
+                &[
+                    "scripts/config",
+                    "--enable",
+                    "CONFIG_SQUASHFS_CHOICE_DECOMP_BY_MOUNT",
+                ],
+                false,
+            )
+            .context(
+                "Failed to enable CONFIG_SQUASHFS_CHOICE_DECOMP_BY_MOUNT flag to kernel config",
+            )?;
+            Self::run_command(
+                &[
+                    "scripts/config",
+                    "--enable",
+                    "CONFIG_SQUASHFS_MOUNT_DECOMP_THREADS",
+                ],
+                false,
+            )
+            .context(
+                "Failed to enable CONFIG_SQUASHFS_MOUNT_DECOMP_THREADS flag to kernel config",
+            )?;
+            Self::run_command(
+                &["scripts/config", "--enable", "CONFIG_SQUASHFS_XATTR"],
+                false,
+            )
+            .context("Failed to enable CONFIG_SQUASHFS_XATTR flag to kernel config")?;
+            Self::run_command(
+                &["scripts/config", "--enable", "CONFIG_SQUASHFS_ZLIB"],
+                false,
+            )
+            .context("Failed to enable CONFIG_SQUASHFS_ZLIB flag to kernel config")?;
+            Self::run_command(
+                &["scripts/config", "--enable", "CONFIG_SQUASHFS_LZ4"],
+                false,
+            )
+            .context("Failed to enable CONFIG_SQUASHFS_LZ4 flag to kernel config")?;
+            Self::run_command(
+                &["scripts/config", "--enable", "CONFIG_SQUASHFS_LZO"],
+                false,
+            )
+            .context("Failed to enable CONFIG_SQUASHFS_LZO flag to kernel config")?;
+            Self::run_command(&["scripts/config", "--enable", "CONFIG_SQUASHFS_XZ"], false)
+                .context("Failed to enable CONFIG_SQUASHFS_XZ flag to kernel config")?;
+            Self::run_command(
+                &["scripts/config", "--enable", "CONFIG_SQUASHFS_ZSTD"],
+                false,
+            )
+            .context("Failed to enable CONFIG_SQUASHFS_ZSTD flag to kernel config")?;
+            Self::run_command(
+                &[
+                    "scripts/config",
+                    "--enable",
+                    "CONFIG_SQUASHFS_4K_DEVBLK_SIZE",
+                ],
+                false,
+            )
+            .context("Failed to enable CONFIG_SQUASHFS_4K_DEVBLK_SIZE flag to kernel config")?;
+            Self::run_command(
+                &[
+                    "scripts/config",
+                    "--set-val",
+                    "3",
+                    "CONFIG_SQUASHFS_FRAGMENT_CACHE_SIZE",
+                ],
+                false,
+            )
+            .context("Failed to set CONFIG_SQUASHFS_FRAGMENT_CACHE_SIZE value to kernel config")?;
+            Self::run_command(
+                &["scripts/config", "--disable", "CONFIG_SQUASHFS_EMBEDDED"],
+                false,
+            )
+            .context("Failed to disable CONFIG_SQUASHFS_EMBEDDED flag to kernel config ")?;
+
+            // Build the kernel
             Self::run_command(&["make", &format!("-j{}", num_cpus::get())], false)
                 .context("Failed to build kernel")?;
 
