@@ -8,7 +8,7 @@ repository = "https://github.com/gevulotnetwork/gvltctl"
 description = "Gevulot Control CLI"
 
 [dependencies]
-gevulot-rs = "0.1.3-pre.4"
+gevulot-rs = "0.1.3"
 
 bip32 = "0.5.1"
 cargo_metadata = "0.19"
