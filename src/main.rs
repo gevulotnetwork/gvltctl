@@ -187,7 +187,7 @@ fn setup_command_line_args() -> Result<Command, Box<dyn std::error::Error>> {
             .value_hint(ValueHint::Other)
             .action(ArgAction::Set),
         Arg::new("password")
-            .short('n')
+            .short('p')
             .long("password")
             .value_name("PASSWORD")
             .env("GEVULOT_PASSWORD")
