@@ -1,63 +1,87 @@
 use gevulot_rs::builders::{ByteSize, ByteUnit, MsgCreateWorkerBuilder, MsgDeleteWorkerBuilder};
+use patharg::InputArg;
+use serde_json::Value;
+use std::path::Path;
 
-use crate::{connect_to_gevulot, print_object, read_file};
+use crate::{connect_to_gevulot, print_object, read_file, ChainArgs, OutputFormat};
+
+/// Workers command.
+#[derive(Clone, Debug, clap::Parser)]
+pub struct Command {
+    #[command(flatten)]
+    chain_args: ChainArgs,
+
+    #[command(subcommand)]
+    subcommand: Subcommand,
+}
+
+impl Command {
+    /// Match worker subcommand and run it.
+    pub async fn run(&self, format: OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
+        let value = match &self.subcommand {
+            Subcommand::List => list_workers(&self.chain_args).await,
+            Subcommand::Get { id } => get_worker(&self.chain_args, id).await,
+            Subcommand::Create { file } => {
+                create_worker(&self.chain_args, file.path_ref().map(|v| &**v)).await
+            }
+            Subcommand::Delete { id } => delete_worker(&self.chain_args, id).await,
+        }?;
+        print_object(format, &value)
+    }
+}
+
+/// Worker subcommand.
+#[derive(Clone, Debug, clap::Subcommand)]
+enum Subcommand {
+    /// List all workers.
+    List,
+
+    /// Get a specific worker.
+    Get {
+        /// The ID of the worker to retrieve.
+        id: String,
+    },
+
+    /// Create a new worker.
+    Create {
+        /// The file to read the worker data from or '-' to read from stdin.
+        #[arg(short, long, default_value_t)]
+        file: InputArg,
+    },
+
+    /// Delete a worker.
+    Delete {
+        /// The ID of the worker to delete.
+        id: String,
+    },
+}
 
 /// Lists all workers.
-///
-/// # Arguments
-///
-/// * `_sub_m` - A reference to the ArgMatches struct containing parsed command-line arguments.
-///              This is not used directly in the function but is passed to other utility functions.
-///
-/// # Returns
-///
-/// A Result containing () if successful, or a Box<dyn std::error::Error> if an error occurs.
-pub async fn list_workers(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = connect_to_gevulot(_sub_m).await?;
+async fn list_workers(chain_args: &ChainArgs) -> Result<Value, Box<dyn std::error::Error>> {
+    let mut client = connect_to_gevulot(chain_args).await?;
     let workers = client.workers.list().await?;
     let workers: Vec<gevulot_rs::models::Worker> = workers.into_iter().map(Into::into).collect();
-    print_object(_sub_m, &workers)?;
-    Ok(())
+    Ok(serde_json::json!(workers))
 }
 
 /// Retrieves a specific worker by ID.
-///
-/// # Arguments
-///
-/// * `_sub_m` - A reference to the ArgMatches struct containing parsed command-line arguments.
-///              This includes the "id" argument specifying which worker to retrieve.
-///
-/// # Returns
-///
-/// A Result containing () if successful, or a Box<dyn std::error::Error> if an error occurs.
-pub async fn get_worker(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = connect_to_gevulot(_sub_m).await?;
-    if let Some(worker_id) = _sub_m.get_one::<String>("id") {
-        let worker = client.workers.get(worker_id).await?;
-        let worker: gevulot_rs::models::Worker = worker.into();
-        print_object(_sub_m, &worker)?;
-    } else {
-        print_object(_sub_m, &serde_json::json!({
-            "status": "error",
-            "message": "Worker ID is required"
-        }))?;
-    }
-    Ok(())
+async fn get_worker(
+    chain_args: &ChainArgs,
+    worker_id: &str,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let mut client = connect_to_gevulot(chain_args).await?;
+    let worker = client.workers.get(worker_id).await?;
+    let worker: gevulot_rs::models::Worker = worker.into();
+    Ok(serde_json::json!(worker))
 }
 
 /// Creates a new worker based on the provided configuration.
-///
-/// # Arguments
-///
-/// * `_sub_m` - A reference to the ArgMatches struct containing parsed command-line arguments.
-///              This includes the file path for the worker configuration.
-///
-/// # Returns
-///
-/// A Result containing () if successful, or a Box<dyn std::error::Error> if an error occurs.
-pub async fn create_worker(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    let worker: gevulot_rs::models::Worker = read_file(_sub_m).await?;
-    let mut client = connect_to_gevulot(_sub_m).await?;
+async fn create_worker(
+    chain_args: &ChainArgs,
+    path: Option<&Path>,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let worker: gevulot_rs::models::Worker = read_file(path).await?;
+    let mut client = connect_to_gevulot(chain_args).await?;
     let me = client
         .base_client
         .write()
@@ -82,29 +106,19 @@ pub async fn create_worker(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std:
         )
         .await?;
 
-    print_object(_sub_m, &serde_json::json!({
+    Ok(serde_json::json!({
         "status": "success",
         "message": "Worker created successfully",
         "worker_id": resp.id
-    }))?;
-    Ok(())
+    }))
 }
 
 /// Deletes a worker with the specified ID.
-///
-/// # Arguments
-///
-/// * `_sub_m` - A reference to the ArgMatches struct containing parsed command-line arguments.
-///              This includes the "id" argument specifying which worker to delete.
-///
-/// # Returns
-///
-/// A Result containing () if successful, or a Box<dyn std::error::Error> if an error occurs.
-pub async fn delete_worker(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    let worker_id = _sub_m
-        .get_one::<String>("id")
-        .ok_or("Worker ID is required")?;
-    let mut client = connect_to_gevulot(_sub_m).await?;
+async fn delete_worker(
+    chain_args: &ChainArgs,
+    worker_id: &str,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let mut client = connect_to_gevulot(chain_args).await?;
     let me = client
         .base_client
         .write()
@@ -118,14 +132,13 @@ pub async fn delete_worker(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std:
         .delete(
             MsgDeleteWorkerBuilder::default()
                 .creator(me.clone())
-                .id(worker_id.clone())
+                .id(worker_id.to_string())
                 .into_message()?,
         )
         .await?;
 
-    print_object(_sub_m, &serde_json::json!({
+    Ok(serde_json::json!({
         "status": "success",
         "message": format!("Worker {} deleted successfully", worker_id)
-    }))?;
-    Ok(())
+    }))
 }
