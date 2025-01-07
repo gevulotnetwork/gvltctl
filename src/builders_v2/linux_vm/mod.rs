@@ -10,6 +10,7 @@ use tempdir::TempDir;
 
 use crate::builders::{Context, Pipeline, Steps};
 
+mod rootfs;
 mod utils;
 
 /// Image file options.
@@ -269,6 +270,22 @@ impl LinuxVMBuilderError {
 /// Setup pipeline steps depending on the context.
 fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext> {
     let mut steps: Steps<_> = Vec::new();
+
+    // Define source filesystem
+    match &ctx.opts().fs_source {
+        FilesystemSource::Dir(path) => {
+            steps.push(Box::new(rootfs::RootFSFromDir::new(path.clone())));
+        }
+        FilesystemSource::Image { .. } => {
+            steps.push(Box::new(rootfs::RootFSEmpty));
+        }
+        FilesystemSource::Containerfile { .. } => {
+            steps.push(Box::new(rootfs::RootFSEmpty));
+        }
+    }
+
+    steps.push(Box::new(rootfs::InstallRootFS));
+
     Pipeline::from_steps(ctx, steps)
 }
 

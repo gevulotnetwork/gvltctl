@@ -1206,6 +1206,7 @@ dependencies = [
  "cosmrs",
  "directories",
  "env_logger 0.11.5",
+ "fs_extra",
  "gevulot-rs",
  "log",
  "mia-installer",
