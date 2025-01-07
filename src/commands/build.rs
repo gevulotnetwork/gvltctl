@@ -1,8 +1,11 @@
-use crate::OutputFormat;
 use clap::{ValueEnum, ValueHint};
 use serde_json::Value;
 use std::fmt;
 use std::path::PathBuf;
+
+#[cfg(feature = "vm-builder-v2")]
+use crate::builders::linux_vm;
+use crate::{print_object, OutputFormat};
 
 /// Build command.
 #[derive(Clone, Debug, clap::Parser)]
@@ -160,6 +163,34 @@ pub struct BuildArgs {
     )]
     pub output_file: PathBuf,
 
+    /// Use FUSE to mount target image.
+    ///
+    /// Use native OS mounts instead. Requires root privileges.
+    #[cfg(feature = "vm-builder-v2")]
+    #[arg(long)]
+    pub fuse: bool,
+
+    /// Build VM image from scratch with new filesystem and bootloader.
+    ///
+    /// By default pre-built VM image with EXT4 filesystem and EXTLINUX bootloader will be used.
+    /// During build process filesystem will be expanded to required size.
+    /// If this option is set, completely fresh VM image will be created.
+    /// Additional dependencies are required: extlinux.
+    /// This option implies --fuse disabled.
+    #[cfg(feature = "vm-builder-v2")]
+    #[arg(long)]
+    pub from_scratch: bool,
+
+    /// Generate only base VM image.
+    ///
+    /// If this option is enabled, only base VM image will be generated.
+    /// Base image includes bootloader, partition table and filesystem.
+    /// Image created with this command is used by default when building VM image from container.
+    /// This option implies --fuse disabled.
+    #[cfg(feature = "vm-builder-v2")]
+    #[arg(hide = true, long)]
+    pub generate_base_image: bool,
+
     /// Force the build and try to fix known problems along the way.
     ///
     /// This will overwrite existing files and attempt to clean up previous build artifacts.
@@ -253,6 +284,106 @@ async fn build(build_args: &BuildArgs) -> Result<Value, Box<dyn std::error::Erro
 }
 
 #[cfg(feature = "vm-builder-v2")]
+impl TryFrom<&BuildArgs> for linux_vm::LinuxVMBuildContext {
+    type Error = anyhow::Error;
+
+    fn try_from(opts: &BuildArgs) -> Result<Self, Self::Error> {
+        use anyhow::{anyhow, bail};
+        use linux_vm::{FilesystemSource, ImageFileOpts, InitSystemOpts, KernelOpts, MountType};
+
+        let image_file_opts = ImageFileOpts {
+            path: PathBuf::from(&opts.output_file),
+            size: if let Some(size) = &opts.image_size {
+                size.parse::<bytesize::ByteSize>()
+                    .map_err(|_| anyhow!("invalid image size"))?
+                    .as_u64()
+            } else {
+                linux_vm::MIN_IMAGE_SIZE.as_u64()
+            },
+            force: opts.force,
+        };
+
+        let kernel_opts = if let Some(file) = &opts.kernel_file {
+            KernelOpts::Precompiled {
+                file: PathBuf::from(file),
+            }
+        } else {
+            KernelOpts::Source {
+                version: opts.kernel_version.clone(),
+                repository_url: opts.kernel_url.clone(),
+            }
+        };
+
+        let nvidia_drivers = opts.nvidia_drivers;
+
+        let mount_type = if opts.fuse && !opts.from_scratch {
+            MountType::Fuse
+        } else {
+            MountType::Native
+        };
+
+        let init_system_opts = if let Some(init) = &opts.init {
+            InitSystemOpts::Custom {
+                init: init.clone(),
+                init_args: opts.init_args.clone(),
+            }
+        } else {
+            InitSystemOpts::Mia {
+                mia_version: opts.mia_version.clone(),
+                mounts: opts.mounts.clone(),
+                default_mounts: !opts.no_default_mounts,
+                kernel_modules: opts.kernel_modules.clone(),
+                gevulot_runtime: !opts.no_gevulot_runtime,
+            }
+        };
+
+        let fs_source = if let Some(path) = &opts.image.rootfs_dir {
+            FilesystemSource::Dir(PathBuf::from(path))
+        } else if let Some(reference) = &opts.image.container {
+            FilesystemSource::Image {
+                reference: reference.clone(),
+                backend: match opts.container_backend {
+                    ContainerBackend::Podman => linux_vm::ContainerBackend::Podman,
+                    ContainerBackend::Docker => linux_vm::ContainerBackend::Docker,
+                },
+            }
+        } else if let Some(path) = &opts.image.containerfile {
+            FilesystemSource::Containerfile {
+                file: PathBuf::from(path),
+                backend: match opts.container_backend {
+                    ContainerBackend::Podman => linux_vm::ContainerBackend::Podman,
+                    ContainerBackend::Docker => linux_vm::ContainerBackend::Docker,
+                },
+            }
+        } else {
+            bail!("no source was specified");
+        };
+
+        let gen_base_img = opts.generate_base_image;
+        let from_scratch = opts.from_scratch;
+
+        let opts = linux_vm::BuildOpts {
+            image_file_opts,
+            kernel_opts,
+            mount_type,
+            nvidia_drivers,
+            init_system_opts,
+            fs_source,
+            from_scratch,
+            gen_base_img,
+        };
+
+        Ok(Self::from_opts(opts)?)
+    }
+}
+
+#[cfg(feature = "vm-builder-v2")]
 async fn build(build_args: &BuildArgs) -> Result<Value, Box<dyn std::error::Error>> {
-    todo!()
+    let mut build_context = linux_vm::LinuxVMBuildContext::try_from(build_args)?;
+    linux_vm::build(&mut build_context)?;
+
+    Ok(serde_json::json!({
+        "message": format!("Created {}", build_args.output_file.display()),
+        "image": &build_args.output_file,
+    }))
 }
