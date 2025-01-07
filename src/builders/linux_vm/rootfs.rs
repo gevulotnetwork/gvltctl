@@ -1,10 +1,16 @@
+//! Root filesystem handling.
+//!
+//! Main type is [`RootFS`], which represents filesystem source files to pack into VM.
+
 use anyhow::{anyhow, Context, Result};
+use bytesize::ByteSize;
 use fs_extra::dir;
 use log::{debug, info};
-use std::path::{Path, PathBuf};
+use std::error::Error;
 use std::fmt;
-use bytesize::ByteSize;
+use std::path::{Path, PathBuf};
 
+use crate::builders::linux_vm::utils::run_command;
 use crate::builders::Step;
 
 use super::LinuxVMBuildContext;
@@ -13,15 +19,13 @@ use super::LinuxVMBuildContext;
 #[derive(Clone, Debug)]
 pub struct RootFS {
     path: PathBuf,
-    size: ByteSize,
 }
 
 impl RootFS {
     /// Create roof filesystem handler from given path.
     pub fn from_path(path: PathBuf) -> Result<Self> {
         debug_assert!(path.is_dir());
-        let size = ByteSize::b(dir::get_size(&path).context("get root filesystem size")?);
-        Ok(Self { size, path })
+        Ok(Self { path })
     }
 
     /// Path to root filesystem directory on host machine.
@@ -30,16 +34,35 @@ impl RootFS {
     }
 
     /// Size of all files in the filesystem.
-    pub fn size(&self) -> ByteSize {
-        self.size
+    pub fn size(&self) -> Result<ByteSize> {
+        dir::get_size(&self.path)
+            .context("failed to get root filesystem size")
+            .map(|bytes| ByteSize::b(bytes))
     }
 
     /// Install root filesystem from host to target filesystem.
     pub fn install(&self, mountpoint: &Path) -> Result<()> {
-        dir::copy(self.path(), mountpoint, &dir::CopyOptions::new())
-            .context("copy root filesystem content")
-            .map_err(Into::into)
-            .map(|_| ())
+        // FIXME: for some weird reason commented code below fails with error:
+        //   "No such file or directory"
+        // So using 'cp -r' instead. Probably will fix in the future.
+
+        // let copy_opts = dir::CopyOptions::new()
+        //     .content_only(true);
+        // if let Err(err) = dir::copy(self.path(), mountpoint, &copy_opts) {
+        //     // `fs_extra` error reporting is crazy, so we manually print the actual error here.
+        //     let inner = format!("{:?}", &err.kind);
+        //     return Err(err)
+        //         .context(inner)
+        //         .context("failed to copy root filesystem");
+        // }
+
+        run_command([
+            "sh",
+            "-c",
+            &format!("cp -r {}/* {}", self.path().display(), mountpoint.display()),
+        ])
+        .context("failed to copy root filesystem content")?;
+        Ok(())
     }
 }
 
@@ -52,6 +75,26 @@ impl fmt::Display for RootFS {
 impl AsRef<Path> for RootFS {
     fn as_ref(&self) -> &Path {
         self.path()
+    }
+}
+
+/// Create empty root filesystem (essentially just a temporary directory).
+pub struct RootFSEmpty;
+
+impl Step<LinuxVMBuildContext> for RootFSEmpty {
+    fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
+        info!("setting empty root filesystem");
+        let path = ctx.tmpdir().join("rootfs");
+        std::fs::create_dir(&path)
+            .context("failed to create temp directory for root filesystem")?;
+        let rootfs = RootFS::from_path(path).context("set root filesystem path")?;
+        debug!(
+            "root filesystem set: {} ({} bytes)",
+            &rootfs,
+            rootfs.size()?
+        );
+        ctx.0.set("rootfs", Box::new(rootfs));
+        Ok(())
     }
 }
 
@@ -70,7 +113,11 @@ impl Step<LinuxVMBuildContext> for RootFSFromDir {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         info!("setting root filesystem");
         let rootfs = RootFS::from_path(self.path.clone()).context("set root filesystem path")?;
-        debug!("root filesystem set: {} ({} bytes)", &rootfs, rootfs.size());
+        debug!(
+            "root filesystem set: {} ({} bytes)",
+            &rootfs,
+            rootfs.size()?
+        );
         ctx.0.set("rootfs", Box::new(rootfs));
         Ok(())
     }
@@ -81,17 +128,22 @@ pub struct InstallRootFS;
 
 impl Step<LinuxVMBuildContext> for InstallRootFS {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
-        info!("installing root filesystem");
-
         let rootfs = ctx.0.get::<RootFS>("rootfs").ok_or(anyhow!(
             "cannot install root filesystem: root filesystem not found"
         ))?;
+        info!("installing root filesystem: {}", rootfs.path().display());
 
         let mountpoint = ctx.0.get::<PathBuf>("mountpoint").ok_or(anyhow!(
             "cannot install root filesystem: mount handler not found"
         ))?;
 
-        rootfs.install(mountpoint)?;
+        rootfs
+            .install(mountpoint)
+            .context("failed to install root filesystem")?;
+        debug!(
+            "root filesystem installed to {}:/",
+            ctx.opts().image_path.display()
+        );
 
         Ok(())
     }

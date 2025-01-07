@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use bytesize::ByteSize;
-use log::{debug, info};
+use log::{debug, info, trace};
+use std::ffi::OsStr;
 use std::path::{self, Path, PathBuf};
 use std::{fmt, fs};
 
@@ -45,8 +46,8 @@ pub enum Kernel {
 impl fmt::Display for Kernel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let path = match self {
-            Kernel::Precompiled { path, .. } => path,
-            Kernel::Sources { path, .. } => path,
+            Self::Precompiled { path, .. } => path,
+            Self::Sources { path, .. } => path,
         };
         f.write_str(&format!("{}", path.display()))
     }
@@ -56,22 +57,51 @@ impl Kernel {
     /// Path to the kernel binary.
     pub fn path(&self) -> &Path {
         match self {
-            Kernel::Precompiled { path, .. } => path.as_path(),
-            Kernel::Sources { path, .. } => path.as_path(),
+            Self::Precompiled { path, .. } => path.as_path(),
+            Self::Sources { path, .. } => path.as_path(),
+        }
+    }
+
+    /// Return path to sources if some.
+    pub fn source_path(&self) -> Option<&Path> {
+        match self {
+            Self::Precompiled { .. } => None,
+            Self::Sources { source_path, .. } => Some(source_path.as_path()),
         }
     }
 
     /// Size of kernel binary.
     pub fn size(&self) -> ByteSize {
         match self {
-            Kernel::Precompiled { size, .. } => *size,
-            Kernel::Sources { size, .. } => *size,
+            Self::Precompiled { size, .. } => *size,
+            Self::Sources { size, .. } => *size,
         }
     }
 
     /// Whether kernel was precompiled or not.
     pub fn is_precompiled(&self) -> bool {
         matches!(self, Self::Precompiled { .. })
+    }
+
+    // TODO: use this function.
+    // TODO: maybe use libgit instead of executable?
+    /// Clone Linux kernel repository into `path/version` returning path to resulting directory.
+    fn clone(git_url: &str, version: &str, path: &Path) -> Result<PathBuf> {
+        let target_path = path.join(version);
+        let mut command = vec![
+            OsStr::new("git"),
+            OsStr::new("clone"),
+            OsStr::new("--depth"),
+            OsStr::new("1"),
+        ];
+        if version != "latest" {
+            command.push(OsStr::new("--branch"));
+            command.push(OsStr::new(version));
+        }
+        command.push(OsStr::new(git_url));
+        command.push(target_path.as_os_str());
+        run_command(&command).context("failed to clone kernel repository")?;
+        Ok(target_path)
     }
 
     /// Build kernel from sources.
@@ -180,12 +210,11 @@ pub struct Install;
 
 impl Step<LinuxVMBuildContext> for Install {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
-        info!("installing kernel");
-
         let kernel = ctx
             .0
             .get::<Kernel>("kernel")
             .ok_or(anyhow!("cannot install kernel: kernel not found"))?;
+        info!("installing kernel: {}", kernel.path().display());
 
         let mountpoint = ctx
             .0
@@ -196,6 +225,11 @@ impl Step<LinuxVMBuildContext> for Install {
         let installed_kernel_relative = PathBuf::from("bzImage");
 
         let kernel_path = mountpoint.join(&installed_kernel_relative);
+        trace!(
+            "copying {} into {}",
+            kernel.path().display(),
+            kernel_path.display()
+        );
         fs::copy(kernel.path(), &kernel_path).context("kernel installation failed")?;
 
         let installed_kernel = Path::new(path::MAIN_SEPARATOR_STR).join(installed_kernel_relative);

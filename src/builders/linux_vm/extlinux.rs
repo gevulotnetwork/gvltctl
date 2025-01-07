@@ -64,7 +64,9 @@ impl Extlinux {
 
     /// Install EXTLINUX config file.
     pub fn install_config(&self, mountpoint: &Path, cfg: &str) -> Result<()> {
-        let cfg_path = mountpoint.join(self.directory_relative()?).join("extlinux.conf");
+        let cfg_path = mountpoint
+            .join(self.directory_relative()?)
+            .join("extlinux.conf");
         let mut file =
             fs::File::create_new(&cfg_path).context("failed to create EXTLINUX config file")?;
         file.write_all(cfg.as_bytes())
@@ -109,7 +111,11 @@ impl Step<LinuxVMBuildContext> for InstallExtlinuxCfg {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         info!("installing EXTLINUX config");
 
-        let extlinux = ctx.0.get::<Extlinux>("extlinux").cloned().unwrap_or_default();
+        let extlinux = ctx
+            .0
+            .get::<Extlinux>("extlinux")
+            .cloned()
+            .unwrap_or_default();
 
         let mountpoint = ctx.0.get::<PathBuf>("mountpoint").ok_or(anyhow!(
             "cannot install EXTLINUX config: mount point not found"
@@ -119,6 +125,23 @@ impl Step<LinuxVMBuildContext> for InstallExtlinuxCfg {
             "cannot install EXTLINUX config: no installed kernel"
         ))?;
 
+        let init = if let Some(init) = &ctx.opts().init {
+            format!(" init={}", init)
+        } else {
+            "".to_string()
+        };
+
+        let init_args = if let Some(init_args) = &ctx.opts().init_args {
+            format!(" -- {}", init_args)
+        } else {
+            "".to_string()
+        };
+
+        let root_partition = "/dev/sda1".to_string();
+
+        let rw_root = false;
+        let root_dev_mode = if rw_root { "rw" } else { "ro" };
+
         let cfg = format!(
             r#"DEFAULT linux
 PROMPT 0
@@ -126,9 +149,15 @@ TIMEOUT 50
 
 LABEL linux
     LINUX {}
-    APPEND root=/dev/sda1 ro console=ttyS0 init=/bin/testapp
+    APPEND root={} {} console=ttyS0{}{}
 "#,
-            installed_kernel.to_str().ok_or(anyhow!("non-UTF-8 path to installed kernel"))?
+            installed_kernel
+                .to_str()
+                .ok_or(anyhow!("non-UTF-8 path to installed kernel"))?,
+            root_partition,
+            root_dev_mode,
+            init,
+            init_args,
         );
 
         extlinux

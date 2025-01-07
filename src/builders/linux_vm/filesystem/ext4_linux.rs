@@ -2,6 +2,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use log::{debug, info};
 use std::ffi::OsStr;
 use std::fs;
+use std::io::{self, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use crate::builders::linux_vm::mbr::Mbr;
@@ -105,7 +106,6 @@ impl FileSystemHandler for Ext4 {
     fn check(&self) -> Result<()> {
         let mut target = self.path.as_os_str().to_os_string();
         target.push(OsStr::new(&format!("?offset={}", self.offset)));
-        debug!("checking filesystem on {}", target.to_string_lossy());
         run_command([
             OsStr::new("e2fsck"),
             OsStr::new("-f"),
@@ -120,26 +120,56 @@ impl FileSystemHandler for Ext4 {
     ///
     /// `new_size` - new size of the filesystem in blocks.
     ///
-    /// Wrapper for `resize2fs IMAGE?offset=OFFSET NEW_SIZE`.
+    /// Wrapper for `resize2fs`.
     fn resize(&self, new_size: u64) -> Result<()> {
-        // TODO:
-        // copy file without first sector
-        // resize2fs
-        // bring first sector back
+        // HACK: becase resize2fs IMAGE?offset=OFFSET produces broken filesystem,
+        // we copy the filesystem into temp file, temporarily stripping pre-fs sectors,
+        // then we resize it there and copy back.
 
+        // Copy filesystem into temp file
+        let tmp_dir =
+            tempdir::TempDir::new("linux-vm-fs").context("failed to create temp directory")?;
+        let tmp_path = tmp_dir.path().join("tmpfs");
+        let mut tmp_file =
+            fs::File::create_new(&tmp_path).context("failed to create temp filesystem image")?;
+
+        let mut cur_file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&self.path)
+            .context("failed to open image file")?;
+        cur_file
+            .seek(SeekFrom::Start(self.offset))
+            .context("failed to seek image file")?;
+
+        io::copy(&mut cur_file, &mut tmp_file)
+            .context("failed to copy filesystem into temp image")?;
+
+        // Close file to avoid issues when resizing fs.
+        drop(tmp_file);
+
+        // Resize filesystem in temp file
         // Size of the filesystem in blocks (rounded to floor)
-        let mut target = self.path.as_os_str().to_os_string();
-        target.push(OsStr::new(&format!("?offset={}", self.offset)));
-
         run_command([
             OsStr::new("resize2fs"),
             // avoid checks
             OsStr::new("-f"),
             // path
-            &target,
+            tmp_path.as_os_str(),
             // fs size
-            // OsStr::new(new_size.to_string().as_str()),
+            OsStr::new(new_size.to_string().as_str()),
         ])?;
+
+        // Copy filesystem back to original image file
+        cur_file
+            .seek(SeekFrom::Start(self.offset))
+            .context("failed to seek image file")?;
+        let mut tmp_file =
+            fs::File::open(&tmp_path).context("failed to open temp filesystem image")?;
+
+        io::copy(&mut tmp_file, &mut cur_file)
+            .context("failed to copy filesystem from temp image")?;
+
         Ok(())
     }
 }
@@ -175,9 +205,9 @@ impl Step<LinuxVMBuildContext> for Create {
 }
 
 /// Read existing filesystem from partition.
-pub struct Check;
+pub struct UseExisting;
 
-impl Step<LinuxVMBuildContext> for Check {
+impl Step<LinuxVMBuildContext> for UseExisting {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         info!("using existing EXT4 filesystem on the partition");
 

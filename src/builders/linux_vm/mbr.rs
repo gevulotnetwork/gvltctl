@@ -101,17 +101,16 @@ impl Mbr {
         self.write()
     }
 
-    /// Extend partition-1 returning old size. Disk size is also updated.
+    /// Extend partition-1 returning old size. Disk size value is also updated.
     /// Changes are written to disk.
     /// `extend` is given in bytes.
     pub fn extend_partition(&mut self, extend: u64) -> Result<()> {
         let extend: u32 = (extend / Self::SECTOR_SIZE as u64)
             .try_into()
-            .map_err(|_| anyhow!("disk size too big"))?;
+            .map_err(|_| anyhow!("disk size is too big"))?;
         self.mbr.disk_size += extend;
         self.mbr.header.partition_1.sectors += extend;
-        self.write()?;
-        Ok(())
+        self.write()
     }
 
     /// Path to disk image.

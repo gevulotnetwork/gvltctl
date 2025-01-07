@@ -1,8 +1,8 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use clap::{Arg, ArgGroup, ArgMatches, ValueHint};
 use std::path::PathBuf;
 
-use gvltctl::builders::linux_vm::{self, LinuxVMBuildContext};
+use gvltctl::builders::linux_vm::{self, LinuxVMBuildContext, FilesystemSource};
 
 pub fn get_command() -> clap::Command {
     clap::Command::new("build")
@@ -326,11 +326,27 @@ impl TryFrom<&BuildOptions> for LinuxVMBuildContext {
             linux_vm::MIN_IMAGE_SIZE
         };
         let image_path = PathBuf::from(&opts.output_file);
-        let rootfs_dir = opts.rootfs_dir.as_ref().map(PathBuf::from);
+        let fs_source = if let Some(path) = &opts.rootfs_dir {
+            FilesystemSource::Dir(PathBuf::from(path))
+        } else if let Some(reference) = &opts.container_source {
+            FilesystemSource::Image(reference.clone())
+        } else if let Some(path) = &opts.containerfile {
+            FilesystemSource::Containerfile(PathBuf::from(path))
+        } else {
+            bail!("no source was specified");
+        };
         let force = opts.force;
         let gen_base_img = opts.gen_base;
         let from_scratch = opts.from_scratch;
         let fuse = opts.fuse && !from_scratch;
+        let container_backend = "podman".try_into()?;
+        let gevulot_runtime = !opts.no_gevulot_runtime;
+        let nvidia_drivers = opts.nvidia_drivers;
+        let mia_version = "latest".to_string();
+        let init = opts.init.clone();
+        let init_args = opts.init_args.clone();
+        let mounts = opts.mounts.clone();
+        let default_mounts = !opts.no_default_mounts;
 
         let opts = linux_vm::BuildOpts {
             image_size,
@@ -340,12 +356,20 @@ impl TryFrom<&BuildOptions> for LinuxVMBuildContext {
             kernel_file,
             kernel_url,
             kernel_version,
-            rootfs_dir,
+            fs_source,
             gen_base_img,
             from_scratch,
+            container_backend,
+            gevulot_runtime,
+            nvidia_drivers,
+            mia_version,
+            init,
+            init_args,
+            mounts,
+            default_mounts,
         };
 
-        Ok(Self::from_opts(opts))
+        Ok(Self::from_opts(opts)?)
     }
 }
 

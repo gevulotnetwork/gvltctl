@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use log::{debug, error, trace};
+use log::{error, trace};
 use std::ffi::OsStr;
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
@@ -19,7 +19,7 @@ where
     let program = &commands[0];
     let args = &commands[1..];
 
-    debug!(
+    trace!(
         "running command: '{} {}'",
         program.to_string_lossy(),
         args.join(OsStr::new(" ")).to_string_lossy()
@@ -93,7 +93,7 @@ where
             .lines()
             .for_each(|line| error!(target: &program.to_string_lossy(), "{}", line));
         Err(anyhow!(
-            "child process `{}` failed with status: {}",
+            "child process `{}` failed with {}",
             program.to_string_lossy(),
             exit_status
         ))

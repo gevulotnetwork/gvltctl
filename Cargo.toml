@@ -15,7 +15,7 @@ fat32 = ["dep:fatfs", "dep:fscommon", "dep:unix_path"]
 [dependencies]
 # TODO: change rev to tag when available
 gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", rev = "17c3787d96715b895074ca4118d6ea8135b2aea5" }
-mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", tag = "mia-installer-0.2.1" }
+mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", tag = "mia-installer-0.2.5" }
 
 bip32 = "0.5.1"
 clap = { version = "4", features = ["env", "cargo"] }
@@ -41,6 +41,8 @@ which = "7"
 semver = "1"
 cfg-if = "1"
 bytesize = "1"
+tar = "0.4"
+directories = "5"
 
 # fat32 dependencies
 fatfs = { git = "https://github.com/rafalh/rust-fatfs.git", branch = "master", optional = true }

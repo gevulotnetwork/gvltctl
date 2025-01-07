@@ -147,8 +147,7 @@ impl UseImageFile {
 
 impl Step<LinuxVMBuildContext> for UseImageFile {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
-        info!("using base image file");
-        debug!("base image file: {}", self.base_image.display());
+        info!("using base image file: {}", self.base_image.display());
         let image_file =
             ImageFile::from_existing(&self.base_image, &ctx.opts().image_path, ctx.opts().force)?;
         debug!(

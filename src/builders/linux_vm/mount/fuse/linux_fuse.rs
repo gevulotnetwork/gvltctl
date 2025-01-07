@@ -107,10 +107,11 @@ impl MountHandler for FuseMount {
     {
         let fuse2fs = Fuse2fs::locate().context("locating fuse2fs")?;
         let offset = fs.offset();
-        let mountpoint = TempDir::new("mount").context("create temp directory for mounting")?;
+        let mountpoint =
+            TempDir::new("linux-vm-mount").context("create temp directory for mounting")?;
         fuse2fs.run([
             OsStr::new("-o"),
-            OsStr::new(&format!("fakeroot,offset={}", offset)),
+            OsStr::new(&format!("big_writes,fakeroot,offset={}", offset)),
             source.as_ref().as_os_str(),
             mountpoint.path().as_os_str(),
         ])?;
