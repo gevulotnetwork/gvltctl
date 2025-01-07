@@ -14,6 +14,7 @@ mod container;
 mod extlinux;
 mod filesystem;
 mod image_file;
+mod kernel;
 mod mbr;
 mod mount;
 mod rootfs;
@@ -333,6 +334,22 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
         }
     }
 
+    // Prepare Linux kernel
+    match &ctx.opts().kernel_opts {
+        KernelOpts::Precompiled { file } => {
+            steps.push(Box::new(kernel::Precompiled::new(file.clone())));
+        }
+        KernelOpts::Source {
+            version,
+            repository_url,
+        } => {
+            steps.push(Box::new(kernel::Build::new(
+                repository_url.clone(),
+                version.clone(),
+            )));
+        }
+    }
+
     if ctx.opts().from_scratch {
         steps.push(Box::new(image_file::CreateImageFile));
         steps.push(Box::new(mbr::CreateMBR));
@@ -358,6 +375,7 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
         steps.push(Box::new(extlinux::InstallExtlinux));
     }
 
+    steps.push(Box::new(kernel::Install));
     steps.push(Box::new(rootfs::InstallRootFS));
     steps.push(Box::new(extlinux::InstallExtlinuxCfg));
 
