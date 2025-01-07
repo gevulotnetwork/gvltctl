@@ -1,5 +1,3 @@
-use crate::builders::skopeo_builder::SkopeoSyslinuxBuilder;
-use crate::builders::{BuildOptions, ImageBuilder};
 use crate::OutputFormat;
 use clap::ValueHint;
 use std::path::PathBuf;
@@ -206,9 +204,18 @@ impl BuildArgs {
     }
 }
 
+#[cfg(not(feature = "vm-builder-v2"))]
 async fn build(build_args: &BuildArgs) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::builders::skopeo_builder::SkopeoSyslinuxBuilder;
+    use crate::builders::{BuildOptions, ImageBuilder};
+
     let options = BuildOptions::from(build_args);
     let builder = SkopeoSyslinuxBuilder {};
     builder.build(&options)?;
     Ok(())
+}
+
+#[cfg(feature = "vm-builder-v2")]
+async fn build(_build_args: &BuildArgs) -> Result<(), Box<dyn std::error::Error>> {
+    todo!()
 }
