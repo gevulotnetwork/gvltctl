@@ -25,15 +25,8 @@ tokio = { version = "1", features = ["full"] }
 toml = "0.8.19"
 openssl = { version = "*", optional = true }
 
-[build-dependencies]
-shadow-rs = { version = "0.36", features = ["metadata"] }
-
-[features]
-# This feature should be enabled when building static executable
-openssl-vendored = ["openssl/vendored"]
-
-[target.'cfg(target_os = "linux")'.dependencies]
-mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", tag = "mia-installer-0.2.5"}
+# Linux VM builder dependencies
+mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", tag = "mia-installer-0.2.5" }
 
 anyhow = "1"
 log = "0.4.22"
@@ -41,3 +34,10 @@ num_cpus = "1.16.0"
 oci-spec = "0.7.0"
 tempdir = "0.3.7"
 thiserror = "1"
+
+[build-dependencies]
+shadow-rs = { version = "0.36", features = ["metadata"] }
+
+[features]
+# This feature should be enabled when building static executable
+openssl-vendored = ["openssl/vendored"]

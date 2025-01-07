@@ -12,11 +12,9 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{self, Read, Write};
 
-#[cfg(target_os = "linux")]
 mod builders;
 mod commands;
 
-#[cfg(target_os = "linux")]
 use commands::build::*;
 use commands::{pins::*, sudo::*, tasks::*, workers::*};
 
@@ -78,7 +76,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(("send", sub_m)) => send_tokens(sub_m).await?,
         Some(("account-info", sub_m)) => account_info(sub_m).await?,
         Some(("generate-completion", sub_m)) => generate_completion(sub_m).await?,
-        #[cfg(target_os = "linux")]
         Some(("build", sub_m)) => build(sub_m).await?,
         _ => println!("Unknown command"),
     }
@@ -215,8 +212,7 @@ fn setup_command_line_args() -> Result<Command, Box<dyn std::error::Error>> {
             .map(get_gevulot_rs_version)
             .flatten();
 
-    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
-    let mut command = clap::command!()
+    let command = clap::command!()
         .long_version(format!(
             "{} ({})\ngevulot-rs {}\nplatform: {}",
             build_info::PKG_VERSION,
@@ -619,12 +615,8 @@ fn setup_command_line_args() -> Result<Command, Box<dyn std::error::Error>> {
                         .value_hint(ValueHint::FilePath),
                 ),
         )
-        .subcommand(commands::sudo::get_command(&chain_args));
-
-    #[cfg(target_os = "linux")]
-    {
-        command = command.subcommand(commands::build::get_command());
-    }
+        .subcommand(commands::sudo::get_command(&chain_args))
+        .subcommand(commands::build::get_command());
 
     Ok(command)
 }
