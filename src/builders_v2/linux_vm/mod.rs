@@ -17,6 +17,7 @@ mod image_file;
 mod kernel;
 mod mbr;
 mod mount;
+mod nvidia;
 mod rootfs;
 mod utils;
 
@@ -350,6 +351,11 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
         }
     }
 
+    // Prepare NVidia drivers
+    if ctx.opts().nvidia_drivers {
+        steps.push(Box::new(nvidia::BuildDrivers));
+    }
+
     if ctx.opts().from_scratch {
         steps.push(Box::new(image_file::CreateImageFile));
         steps.push(Box::new(mbr::CreateMBR));
@@ -378,6 +384,10 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
     steps.push(Box::new(kernel::Install));
     steps.push(Box::new(rootfs::InstallRootFS));
     steps.push(Box::new(extlinux::InstallExtlinuxCfg));
+
+    if ctx.opts().nvidia_drivers {
+        steps.push(Box::new(nvidia::InstallDrivers));
+    }
 
     Pipeline::from_steps(ctx, steps)
 }
