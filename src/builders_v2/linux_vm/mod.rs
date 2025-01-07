@@ -17,6 +17,7 @@ mod gevulot_runtime;
 mod image_file;
 mod kernel;
 mod mbr;
+mod mia;
 mod mount;
 mod nvidia;
 mod resize;
@@ -396,19 +397,24 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
         steps.push(Box::new(nvidia::InstallDrivers));
     }
 
-    match &ctx.opts().init_system_opts {
-        InitSystemOpts::Mia {
-            mia_version,
-            mounts,
-            default_mounts,
-            kernel_modules,
-            gevulot_runtime,
-        } => {
-            if *gevulot_runtime {
-                steps.push(Box::new(gevulot_runtime::CreateGevulotRuntimeDirs));
-            }
+    if let InitSystemOpts::Mia {
+        mia_version,
+        mounts,
+        default_mounts,
+        kernel_modules,
+        gevulot_runtime,
+    } = &ctx.opts().init_system_opts
+    {
+        if *gevulot_runtime {
+            steps.push(Box::new(gevulot_runtime::CreateGevulotRuntimeDirs));
         }
-        InitSystemOpts::Custom { init, init_args } => todo!(),
+        steps.push(Box::new(mia::InstallMia::new(
+            mia_version.clone(),
+            *gevulot_runtime,
+            kernel_modules.clone(),
+            mounts.clone(),
+            *default_mounts,
+        )));
     }
 
     Pipeline::from_steps(ctx, steps)
