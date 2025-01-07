@@ -14,7 +14,7 @@ pub struct BuildArgs {
     /// Size of the disk image (e.g., 10G, 1024M).
     ///
     /// This determines the total capacity of the VM's virtual disk.
-    #[arg(long, short = 's', value_name = "SIZE", default_value = "10G")]
+    #[arg(long = "size", short = 's', value_name = "SIZE", default_value = "10G")]
     pub image_size: String,
 
     /// Linux kernel version to use (e.g., v6.10).
@@ -54,7 +54,11 @@ pub struct BuildArgs {
     ///
     /// MODULENAME will be passed to modprobe.
     /// This option can't be used together with --init or --init-args.
-    #[arg(long, value_name = "MODULENAME", conflicts_with_all = ["init", "init_args"])]
+    #[arg(
+        long = "kernel-module",
+        value_name = "MODULENAME",
+        conflicts_with_all = ["init", "init_args"],
+    )]
     pub kernel_modules: Vec<String>,
 
     /// Mount directory on startup. Can be passed multiple times.
@@ -144,7 +148,7 @@ pub struct BuildArgs {
     ///
     /// This will be a bootable disk image you can use with QEMU or other VM software.
     #[arg(
-        long,
+        long = "output",
         short,
         value_name = "FILE",
         value_hint = ValueHint::FilePath,

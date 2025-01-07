@@ -74,7 +74,7 @@ enum Subcommand {
     /// Create a new task.
     Create {
         /// The file to read the task data from or '-' to read from stdin.
-        #[arg(default_value_t)]
+        #[arg(short, long, default_value_t)]
         file: InputArg,
     },
 

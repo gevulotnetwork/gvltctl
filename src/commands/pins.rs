@@ -62,6 +62,7 @@ enum Subcommand {
         worker_id: String,
 
         /// Success.
+        #[arg(long)]
         success: bool,
     },
 
