@@ -13,6 +13,7 @@ use crate::builders::{Context, Pipeline, Steps};
 mod container;
 mod extlinux;
 mod filesystem;
+mod gevulot_runtime;
 mod image_file;
 mod kernel;
 mod mbr;
@@ -387,6 +388,21 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
 
     if ctx.opts().nvidia_drivers {
         steps.push(Box::new(nvidia::InstallDrivers));
+    }
+
+    match &ctx.opts().init_system_opts {
+        InitSystemOpts::Mia {
+            mia_version,
+            mounts,
+            default_mounts,
+            kernel_modules,
+            gevulot_runtime,
+        } => {
+            if *gevulot_runtime {
+                steps.push(Box::new(gevulot_runtime::CreateGevulotRuntimeDirs));
+            }
+        }
+        InitSystemOpts::Custom { init, init_args } => todo!(),
     }
 
     Pipeline::from_steps(ctx, steps)
