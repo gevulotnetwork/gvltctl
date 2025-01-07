@@ -10,6 +10,8 @@ use tempdir::TempDir;
 
 use crate::builders::{Context, Pipeline, Steps};
 
+mod utils;
+
 /// Image file options.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ImageFileOpts {
