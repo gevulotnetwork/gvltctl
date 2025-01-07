@@ -12,6 +12,7 @@ use crate::builders::{Context, Pipeline, Steps};
 
 mod container;
 mod image_file;
+mod mbr;
 mod rootfs;
 mod utils;
 
@@ -328,8 +329,10 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
 
     if ctx.opts().from_scratch {
         steps.push(Box::new(image_file::CreateImageFile));
+        steps.push(Box::new(mbr::CreateMBR));
     } else {
         steps.push(Box::new(image_file::UseImageFile::new(BASE_IMAGE_PATH)));
+        steps.push(Box::new(mbr::ReadMBR));
     }
 
     steps.push(Box::new(rootfs::InstallRootFS));
@@ -338,7 +341,10 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
 }
 
 fn setup_base_image_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext> {
-    let steps: Steps<_> = vec![Box::new(image_file::CreateImageFile)];
+    let steps: Steps<_> = vec![
+        Box::new(image_file::CreateImageFile),
+        Box::new(mbr::CreateMBR),
+    ];
     Pipeline::from_steps(ctx, steps)
 }
 
