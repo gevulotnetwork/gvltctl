@@ -36,6 +36,10 @@ oci-spec = "0.7.0"
 tempdir = "0.3.7"
 thiserror = "1"
 
+# Linux VM builder v2 dependencies
+bytesize = { version = "1", optional = true }
+directories = { version = "5", optional = true }
+
 [build-dependencies]
 shadow-rs = { version = "0.36", features = ["metadata"] }
 
@@ -43,7 +47,7 @@ shadow-rs = { version = "0.36", features = ["metadata"] }
 # This feature should be enabled when building static executable
 openssl-vendored = ["openssl/vendored"]
 # Use new version of Linux VM builder (unstable)
-vm-builder-v2 = []
+vm-builder-v2 = ["dep:bytesize", "dep:directories"]
 
 [patch.crates-io]
 gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs", rev = "9aad7a9cbea15e9007ff5b45a566212bdf853620" }
