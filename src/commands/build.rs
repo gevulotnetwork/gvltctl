@@ -1,5 +1,6 @@
 use crate::OutputFormat;
-use clap::ValueHint;
+use clap::{ValueEnum, ValueHint};
+use std::fmt;
 use std::path::PathBuf;
 
 /// Build command.
@@ -8,6 +9,10 @@ pub struct BuildArgs {
     /// Image to use as a source for VM filesystem.
     #[command(flatten)]
     pub image: Image,
+
+    /// Container backend to use.
+    #[arg(long, default_value_t = ContainerBackend::Podman)]
+    pub container_backend: ContainerBackend,
 
     /// Size of the disk image (e.g., 10G, 1024M).
     ///
@@ -195,6 +200,32 @@ pub struct Image {
     /// The file will be used to build a new image which will then be used as the source.
     #[arg(long, short = 'f', value_name = "FILE", value_hint = ValueHint::FilePath)]
     pub containerfile: Option<PathBuf>,
+}
+
+/// Container backend (docker or podman).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+#[value(rename_all = "lower")]
+pub enum ContainerBackend {
+    Podman,
+    Docker,
+}
+
+impl Default for ContainerBackend {
+    fn default() -> Self {
+        Self::Podman
+    }
+}
+
+impl fmt::Display for ContainerBackend {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.to_possible_value()
+                .expect("no skipped values")
+                .get_name()
+        )
+    }
 }
 
 impl BuildArgs {
