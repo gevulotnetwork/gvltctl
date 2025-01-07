@@ -232,8 +232,8 @@ impl LinuxVMBuildContext {
     }
 
     /// Get path to temporary directory, which will be cleaned at the end.
-    pub fn tmpdir(&self) -> &Path {
-        self.get::<TempDir>("tmpdir")
+    pub fn tmp(&self) -> &Path {
+        self.get::<TempDir>("tmp")
             .expect("internal error: temporary directory must always be in Linux VM build context")
             .path()
     }
@@ -302,7 +302,7 @@ impl LinuxVMBuilderError {
 /// This image was created using `--generate-base-image` option.
 const BASE_IMAGE_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/src/builders/linux_vm/data/base.img"
+    "/src/builders_v2/linux_vm/data/base.img"
 );
 
 /// Setup pipeline steps depending on the context.

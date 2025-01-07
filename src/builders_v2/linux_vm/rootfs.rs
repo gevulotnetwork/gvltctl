@@ -86,7 +86,7 @@ pub struct RootFSEmpty;
 impl Step<LinuxVMBuildContext> for RootFSEmpty {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         info!("setting empty root filesystem");
-        let path = ctx.tmpdir().join("rootfs");
+        let path = ctx.tmp().join("rootfs");
         std::fs::create_dir(&path)
             .context("failed to create temp directory for root filesystem")?;
         let rootfs = RootFS::from_path(path).context("set root filesystem path")?;
