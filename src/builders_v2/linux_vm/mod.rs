@@ -14,6 +14,7 @@ mod container;
 mod filesystem;
 mod image_file;
 mod mbr;
+mod mount;
 mod rootfs;
 mod utils;
 
@@ -338,6 +339,15 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
         steps.push(Box::new(filesystem::UseExisting));
     }
 
+    match ctx.opts().mount_type {
+        MountType::Fuse => {
+            steps.push(Box::new(mount::fuse::MountFileSystem));
+        }
+        MountType::Native => {
+            steps.push(Box::new(mount::native::MountFileSystem));
+        }
+    }
+
     steps.push(Box::new(rootfs::InstallRootFS));
 
     Pipeline::from_steps(ctx, steps)
@@ -348,6 +358,7 @@ fn setup_base_image_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMB
         Box::new(image_file::CreateImageFile),
         Box::new(mbr::CreateMBR),
         Box::new(filesystem::Create),
+        Box::new(mount::native::MountFileSystem),
     ];
     Pipeline::from_steps(ctx, steps)
 }
