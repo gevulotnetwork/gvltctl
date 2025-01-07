@@ -11,6 +11,7 @@ use tempdir::TempDir;
 use crate::builders::{Context, Pipeline, Steps};
 
 mod container;
+mod extlinux;
 mod filesystem;
 mod image_file;
 mod mbr;
@@ -163,6 +164,9 @@ pub struct BuildOpts {
 
     /// Create image from scratch (don't use base VM image).
     pub from_scratch: bool,
+
+    /// Mount root filesystem as read-write.
+    pub rw_root: bool,
 
     /// Generate only base (template) of VM image.
     ///
@@ -348,7 +352,14 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
         }
     }
 
+    // EXTLINUX is installed on mounted filesystem.
+    // It doesn't work with FUSE mounts, that's why --from-scratch implies --no-fuse.
+    if ctx.opts().from_scratch {
+        steps.push(Box::new(extlinux::InstallExtlinux));
+    }
+
     steps.push(Box::new(rootfs::InstallRootFS));
+    steps.push(Box::new(extlinux::InstallExtlinuxCfg));
 
     Pipeline::from_steps(ctx, steps)
 }
@@ -359,6 +370,7 @@ fn setup_base_image_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMB
         Box::new(mbr::CreateMBR),
         Box::new(filesystem::Create),
         Box::new(mount::native::MountFileSystem),
+        Box::new(extlinux::InstallExtlinux),
     ];
     Pipeline::from_steps(ctx, steps)
 }

@@ -361,6 +361,7 @@ impl TryFrom<&BuildArgs> for linux_vm::LinuxVMBuildContext {
 
         let gen_base_img = opts.generate_base_image;
         let from_scratch = opts.from_scratch;
+        let rw_root = opts.rw_root;
 
         let opts = linux_vm::BuildOpts {
             image_file_opts,
@@ -370,6 +371,7 @@ impl TryFrom<&BuildArgs> for linux_vm::LinuxVMBuildContext {
             init_system_opts,
             fs_source,
             from_scratch,
+            rw_root,
             gen_base_img,
         };
 
