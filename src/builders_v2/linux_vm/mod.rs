@@ -11,6 +11,7 @@ use tempdir::TempDir;
 use crate::builders::{Context, Pipeline, Steps};
 
 mod container;
+mod image_file;
 mod rootfs;
 mod utils;
 
@@ -278,8 +279,26 @@ impl LinuxVMBuilderError {
     }
 }
 
+// FIXME: fix this, because gvltctl cannot be distributed as self-contained binary this way.
+/// This image contains:
+///  - msdos partition table
+///  - mbr bootcode
+///  - bootloader (syslinux)
+///  - partition p1
+///  - ext4 filesystem
+///
+/// This image was created using `--generate-base-image` option.
+const BASE_IMAGE_PATH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/src/builders/linux_vm/data/base.img"
+);
+
 /// Setup pipeline steps depending on the context.
 fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext> {
+    if ctx.opts().gen_base_img {
+        return setup_base_image_pipeline(ctx);
+    }
+
     let mut steps: Steps<_> = Vec::new();
 
     // Define source filesystem
@@ -307,8 +326,19 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
         }
     }
 
+    if ctx.opts().from_scratch {
+        steps.push(Box::new(image_file::CreateImageFile));
+    } else {
+        steps.push(Box::new(image_file::UseImageFile::new(BASE_IMAGE_PATH)));
+    }
+
     steps.push(Box::new(rootfs::InstallRootFS));
 
+    Pipeline::from_steps(ctx, steps)
+}
+
+fn setup_base_image_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext> {
+    let steps: Steps<_> = vec![Box::new(image_file::CreateImageFile)];
     Pipeline::from_steps(ctx, steps)
 }
 
