@@ -12,8 +12,8 @@ pub struct BuildArgs {
     /// Size of the disk image (e.g., 10G, 1024M).
     ///
     /// This determines the total capacity of the VM's virtual disk.
-    #[arg(long = "size", short = 's', value_name = "SIZE", default_value = "10G")]
-    pub image_size: String,
+    #[arg(long = "size", short = 's', value_name = "SIZE")]
+    pub image_size: Option<String>,
 
     /// Linux kernel version to use (e.g., v6.10).
     ///
