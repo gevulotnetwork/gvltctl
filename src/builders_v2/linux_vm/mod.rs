@@ -19,6 +19,7 @@ mod kernel;
 mod mbr;
 mod mount;
 mod nvidia;
+mod resize;
 mod rootfs;
 mod utils;
 
@@ -357,6 +358,7 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
         steps.push(Box::new(nvidia::BuildDrivers));
     }
 
+    // Get VM image with partitions and filesystem
     if ctx.opts().from_scratch {
         steps.push(Box::new(image_file::CreateImageFile));
         steps.push(Box::new(mbr::CreateMBR));
@@ -366,6 +368,10 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
         steps.push(Box::new(mbr::ReadMBR));
         steps.push(Box::new(filesystem::UseExisting));
     }
+
+    // Extend VM image before filling it with the content.
+    // IMPORTANT: all the artifacts must be generated before this step to correctly get their sizes.
+    steps.push(Box::new(resize::ResizeAll::<filesystem::Ext4>::new()));
 
     match ctx.opts().mount_type {
         MountType::Fuse => {
