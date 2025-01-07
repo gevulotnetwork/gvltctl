@@ -1,5 +1,6 @@
 use crate::OutputFormat;
 use clap::{ValueEnum, ValueHint};
+use serde_json::Value;
 use std::fmt;
 use std::path::PathBuf;
 
@@ -230,23 +231,28 @@ impl fmt::Display for ContainerBackend {
 
 impl BuildArgs {
     /// Run build subcommand.
-    pub async fn run(&self, _format: OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
-        build(self).await
+    pub async fn run(&self, format: OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
+        let value = build(self).await?;
+        print_object(format, &value)
     }
 }
 
 #[cfg(not(feature = "vm-builder-v2"))]
-async fn build(build_args: &BuildArgs) -> Result<(), Box<dyn std::error::Error>> {
+async fn build(build_args: &BuildArgs) -> Result<Value, Box<dyn std::error::Error>> {
     use crate::builders::skopeo_builder::SkopeoSyslinuxBuilder;
     use crate::builders::{BuildOptions, ImageBuilder};
 
     let options = BuildOptions::from(build_args);
     let builder = SkopeoSyslinuxBuilder {};
     builder.build(&options)?;
-    Ok(())
+
+    Ok(serde_json::json!({
+        "message": format!("Created {}", build_args.output_file.display()),
+        "image": &build_args.output_file,
+    }))
 }
 
 #[cfg(feature = "vm-builder-v2")]
-async fn build(_build_args: &BuildArgs) -> Result<(), Box<dyn std::error::Error>> {
+async fn build(build_args: &BuildArgs) -> Result<Value, Box<dyn std::error::Error>> {
     todo!()
 }
