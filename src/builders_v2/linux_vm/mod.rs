@@ -10,6 +10,7 @@ use tempdir::TempDir;
 
 use crate::builders::{Context, Pipeline, Steps};
 
+mod container;
 mod rootfs;
 mod utils;
 
@@ -31,6 +32,16 @@ pub struct ImageFileOpts {
 pub enum ContainerBackend {
     Podman,
     Docker,
+}
+
+impl ContainerBackend {
+    /// Executable name.
+    pub fn exe(&self) -> &'static str {
+        match self {
+            Self::Podman => "podman",
+            Self::Docker => "docker",
+        }
+    }
 }
 
 /// Used-defined kernel options.
@@ -276,11 +287,23 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
         FilesystemSource::Dir(path) => {
             steps.push(Box::new(rootfs::RootFSFromDir::new(path.clone())));
         }
-        FilesystemSource::Image { .. } => {
+        FilesystemSource::Image { reference, backend } => {
             steps.push(Box::new(rootfs::RootFSEmpty));
+
+            let image = container::ContainerImage::new(*backend, reference.clone(), false);
+            ctx.0.set("container-image", Box::new(image));
+            steps.push(Box::new(container::GetContainerRuntime));
+            steps.push(Box::new(container::CopyFilesystem));
         }
-        FilesystemSource::Containerfile { .. } => {
+        FilesystemSource::Containerfile { file, backend } => {
             steps.push(Box::new(rootfs::RootFSEmpty));
+
+            steps.push(Box::new(container::BuildContainerImage::new(
+                *backend,
+                file.clone(),
+            )));
+            steps.push(Box::new(container::GetContainerRuntime));
+            steps.push(Box::new(container::CopyFilesystem));
         }
     }
 

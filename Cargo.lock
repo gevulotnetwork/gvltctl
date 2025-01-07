@@ -1219,6 +1219,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "shadow-rs",
+ "tar",
  "tempdir",
  "thiserror 1.0.64",
  "tokio",
