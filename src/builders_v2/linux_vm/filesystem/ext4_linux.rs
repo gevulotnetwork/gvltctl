@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use log::info;
 use std::ffi::OsStr;
 use std::fs;
