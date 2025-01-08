@@ -1,4 +1,4 @@
-use gevulot_rs::builders::{ByteSize, ByteUnit, MsgCreateWorkerBuilder, MsgDeleteWorkerBuilder};
+use gevulot_rs::builders::{ByteSize, ByteUnit, MsgAnnounceWorkerExitBuilder, MsgCreateWorkerBuilder, MsgDeleteWorkerBuilder};
 use patharg::InputArg;
 use serde_json::Value;
 use std::path::Path;
@@ -25,6 +25,7 @@ impl Command {
                 create_worker(&self.chain_args, file.path_ref().map(|v| &**v)).await
             }
             Subcommand::Delete { id } => delete_worker(&self.chain_args, id).await,
+            Subcommand::AnnounceExit { id } => announce_worker_exit(&self.chain_args, id).await,
         }?;
         print_object(format, &value)
     }
@@ -52,6 +53,12 @@ enum Subcommand {
     /// Delete a worker.
     Delete {
         /// The ID of the worker to delete.
+        id: String,
+    },
+
+    /// Announce a worker's exit.
+    AnnounceExit {
+        /// The ID of the worker to announce exit.
         id: String,
     },
 }
@@ -140,5 +147,32 @@ async fn delete_worker(
     Ok(serde_json::json!({
         "status": "success",
         "message": format!("Worker {} deleted successfully", worker_id)
+    }))
+}
+
+async fn announce_worker_exit(
+    chain_args: &ChainArgs,
+    worker_id: &str,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let mut client = connect_to_gevulot(chain_args).await?;
+    let me = client
+        .base_client
+        .write()
+        .await
+        .address
+        .clone()
+        .ok_or("No address found, did you set a mnemonic?")?;
+    client
+        .workers
+        .announce_exit(
+            MsgAnnounceWorkerExitBuilder::default()
+                .creator(me)
+                .worker_id(worker_id.to_string())
+                .into_message()?,
+        )
+        .await?;
+    Ok(serde_json::json!({
+        "status": "success",
+        "message": format!("Worker {} announced exit successfully", worker_id)
     }))
 }
