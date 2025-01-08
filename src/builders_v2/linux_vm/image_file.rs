@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use crate::builders::Step;
 
-use super::LinuxVMBuildContext;
+use super::{LinuxVMBuildContext, BASE_IMAGE};
 
 /// Image file.
 #[derive(Clone, Debug)]
@@ -136,26 +136,22 @@ impl Step<LinuxVMBuildContext> for CreateImageFile {
 ///
 /// # Context variables defined
 /// - `image-file`
-pub struct UseImageFile {
-    base_image: PathBuf,
-}
-
-impl UseImageFile {
-    pub fn new<P>(base_image: P) -> Self
-    where
-        P: AsRef<Path>,
-    {
-        Self {
-            base_image: base_image.as_ref().to_path_buf(),
-        }
-    }
-}
+pub struct UseImageFile;
 
 impl Step<LinuxVMBuildContext> for UseImageFile {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
-        info!("using base image file: {}", self.base_image.display());
+        let base_image_path = ctx.cache().join("base.img");
+        if !base_image_path.exists() {
+            info!("creating base image file: {}", base_image_path.display());
+            let mut file = fs::File::create_new(&base_image_path)
+                .context("failed to create base image file")?;
+            file.write_all(BASE_IMAGE)
+                .context("failed to write base image file")?;
+        }
+
+        info!("using base image file: {}", base_image_path.display());
         let image_file = ImageFile::from_existing(
-            &self.base_image,
+            &base_image_path,
             &ctx.opts().image_file_opts.path,
             ctx.opts().image_file_opts.force,
         )?;

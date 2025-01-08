@@ -5,6 +5,7 @@ use bytesize::ByteSize;
 use directories::ProjectDirs;
 use std::any::Any;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use tempdir::TempDir;
 
@@ -238,6 +239,13 @@ impl LinuxVMBuildContext {
             .path()
     }
 
+    /// Path to cache directory.
+    pub fn cache(&self) -> &Path {
+        self.get::<PathBuf>("cache")
+            .expect("internal error: cache directory must always be in Linux VM build context")
+            .as_path()
+    }
+
     /// Get reference to value by key. `T` is a downcast type of value.
     /// Returns `None` if `key` doesn't exists or downcast type is wrong.
     pub fn get<T>(&self, key: &'static str) -> Option<&T>
@@ -291,7 +299,6 @@ impl LinuxVMBuilderError {
     }
 }
 
-// FIXME: fix this, because gvltctl cannot be distributed as self-contained binary this way.
 /// This image contains:
 ///  - msdos partition table
 ///  - mbr bootcode
@@ -300,10 +307,12 @@ impl LinuxVMBuilderError {
 ///  - ext4 filesystem
 ///
 /// This image was created using `--generate-base-image` option.
-const BASE_IMAGE_PATH: &str = concat!(
+///
+/// Unfortunatelly this solution increases gvltctl executable size by ~9MB.
+pub const BASE_IMAGE: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/src/builders_v2/linux_vm/data/base.img"
-);
+));
 
 /// Setup pipeline steps depending on the context.
 fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext> {
@@ -365,7 +374,7 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
         steps.push(Box::new(mbr::CreateMBR));
         steps.push(Box::new(filesystem::Create));
     } else {
-        steps.push(Box::new(image_file::UseImageFile::new(BASE_IMAGE_PATH)));
+        steps.push(Box::new(image_file::UseImageFile));
         steps.push(Box::new(mbr::ReadMBR));
         steps.push(Box::new(filesystem::UseExisting));
     }
