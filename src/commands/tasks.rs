@@ -5,7 +5,7 @@ use std::path::Path;
 
 use gevulot_rs::builders::{
     ByteSize, ByteUnit, MsgAcceptTaskBuilder, MsgCreateTaskBuilder, MsgDeclineTaskBuilder,
-    MsgFinishTaskBuilder,
+    MsgFinishTaskBuilder, MsgRescheduleTaskBuilder,
 };
 
 use crate::{connect_to_gevulot, print_object, read_file, ChainArgs, OutputFormat};
@@ -53,6 +53,9 @@ impl Command {
                     output_contexts.as_ref(),
                 )
                 .await
+            }
+            Subcommand::Reschedule { id } => {
+                reschedule_task(&self.chain_args, id).await
             }
         }?;
         print_object(format, &value)
@@ -119,6 +122,12 @@ enum Subcommand {
 
         /// Output contexts produced by the task.
         output_contexts: Option<Vec<String>>,
+    },
+
+    /// Reschedule a task.
+    Reschedule {
+        /// The ID of the task to reschedule.
+        id: String,
     },
 }
 
@@ -303,4 +312,33 @@ pub async fn finish_task(
         )
         .await?;
     Ok(serde_json::json!({}))
+}
+
+pub async fn reschedule_task(
+    chain_args: &ChainArgs,
+    task_id: &str,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let mut client = connect_to_gevulot(chain_args).await?;
+    let me = client
+        .base_client
+        .write()
+        .await
+        .address
+        .clone()
+        .ok_or("No address found, did you set a mnemonic?")?;
+    let resp = client
+        .tasks
+        .reschedule(
+            MsgRescheduleTaskBuilder::default()
+                .creator(me.clone())
+                .task_id(task_id.to_string())
+                .into_message()?,
+        )
+        .await?;
+    Ok(serde_json::json!({
+        "status": "success",
+        "message": "Task rescheduled successfully",
+        "primary": resp.primary,
+        "secondary": resp.secondary
+    }))
 }
