@@ -1,0 +1,33 @@
+name: Test Linux VM build
+
+# For now triggers only manually, because it takes a lot of time to run this (to build Linux kernel actually).
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install Podman
+        run: |-
+          sudo apt-get update
+          sudo apt-get install -y podman
+
+      - name: Build gvltctl debug container (with vm-builder-v2)
+        run: |-
+          podman build -t gvltctl:latest -f containers/Containerfile.debug-test-vm-builder-v2 .
+
+      - name: Run Linux VM builder
+        run: |-
+          podman run --privileged --rm \
+            -e RUST_LOG=trace \
+            -v ${{ github.workspace }}/tests/vm_builder/simple_vm:/mnt/simple_vm \
+            -w /mnt/simple_vm \
+            gvltctl:latest build --fuse -f Containerfile --no-gevulot-runtime
+
+      - name: Check disk.img
+        run: |-
+          file disk.img
