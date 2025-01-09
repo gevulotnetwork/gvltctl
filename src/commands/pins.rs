@@ -1,49 +1,115 @@
-use gevulot_rs::builders::{ByteSize, ByteUnit, MsgCreatePinBuilder, MsgDeletePinBuilder, MsgAckPinBuilder};
+use gevulot_rs::builders::{
+    ByteSize, ByteUnit, MsgAckPinBuilder, MsgCreatePinBuilder, MsgDeletePinBuilder,
+};
+use patharg::InputArg;
+use serde_json::Value;
+use std::path::Path;
 
-use crate::{connect_to_gevulot, print_object, read_file};
+use crate::{connect_to_gevulot, print_object, read_file, ChainArgs, OutputFormat};
+
+/// Pins command.
+#[derive(Clone, Debug, clap::Parser)]
+pub struct Command {
+    #[command(flatten)]
+    chain_args: ChainArgs,
+
+    #[command(subcommand)]
+    subcommand: Subcommand,
+}
+
+impl Command {
+    /// Match pin subcommand and run it.
+    pub async fn run(&self, format: OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
+        let value = match &self.subcommand {
+            Subcommand::List => list_pins(&self.chain_args).await,
+            Subcommand::Get { cid } => get_pin(&self.chain_args, cid).await,
+            Subcommand::Ack {
+                cid,
+                id,
+                worker_id,
+                success,
+            } => ack_pin(&self.chain_args, id, cid, worker_id, *success).await,
+            Subcommand::Create { file } => {
+                create_pin(&self.chain_args, file.path_ref().map(|v| &**v)).await
+            }
+            Subcommand::Delete { cid } => delete_pin(&self.chain_args, cid).await,
+        }?;
+        print_object(format, &value)
+    }
+}
+
+/// Pin subcommand.
+#[derive(Clone, Debug, clap::Subcommand)]
+enum Subcommand {
+    /// List all pins.
+    List,
+
+    /// Get a specific pin.
+    Get {
+        /// The CID of the pin to retrieve.
+        cid: String,
+    },
+
+    /// Ack a pin
+    Ack {
+        /// The ID of the pin to ack.
+        id: String,
+
+        /// The CID of the pin to ack.
+        cid: String,
+
+        /// The ID of the worker.
+        worker_id: String,
+
+        /// Success.
+        #[arg(long)]
+        success: bool,
+    },
+
+    /// Create a new pin.
+    Create {
+        /// The file to read the pin data from or '-' to read from stdin.
+        #[arg(short, long, default_value_t)]
+        file: InputArg,
+    },
+
+    /// Delete a pin.
+    Delete {
+        /// The CID of the pin to delete.
+        cid: String,
+    },
+}
 
 /// Lists all pins in the Gevulot network
-///
-/// This function connects to the Gevulot network, retrieves all pins,
-/// and prints them as YAML output.
-///
-/// # Arguments
-///
-/// * `_sub_m` - A reference to the ArgMatches struct containing parsed command-line arguments.
-///              This is used to access any additional flags or options passed to the command.
-pub async fn list_pins(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = connect_to_gevulot(_sub_m).await?;
+async fn list_pins(chain_args: &ChainArgs) -> Result<Value, Box<dyn std::error::Error>> {
+    let mut client = connect_to_gevulot(chain_args).await?;
     let pins = client.pins.list().await?;
     // Convert the pins to the gevulot_rs::models::Pin type
     let pins: Vec<gevulot_rs::models::Pin> = pins.into_iter().map(Into::into).collect();
-    print_object(_sub_m, &pins)?;
-    Ok(())
+    Ok(serde_json::json!(pins))
 }
 
 /// Retrieves a specific pin from the Gevulot network
-///
-/// This function connects to the Gevulot network, retrieves a pin by its CID,
-/// and prints it as YAML output.
-///
-/// # Arguments
-///
-/// * `_sub_m` - A reference to the ArgMatches struct containing parsed command-line arguments.
-///              This is used to access the CID of the pin to retrieve and any additional options.
-pub async fn get_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = connect_to_gevulot(_sub_m).await?;
-    if let Some(pin_cid) = _sub_m.get_one::<String>("cid") {
-        let pin = client.pins.get(pin_cid).await?;
-        // Convert the pin to the gevulot_rs::models::Pin type
-        let pin: gevulot_rs::models::Pin = pin.into();
-        print_object(_sub_m, &pin)?;
-    } else {
-        println!("Pin CID is required");
-    }
-    Ok(())
+async fn get_pin(
+    chain_args: &ChainArgs,
+    pin_cid: &str,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let mut client = connect_to_gevulot(chain_args).await?;
+    let pin = client.pins.get(pin_cid).await?;
+    // Convert the pin to the gevulot_rs::models::Pin type
+    let pin: gevulot_rs::models::Pin = pin.into();
+    Ok(serde_json::json!(pin))
 }
 
-pub async fn ack_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = connect_to_gevulot(_sub_m).await?;
+/// Ack a specific pin
+async fn ack_pin(
+    chain_args: &ChainArgs,
+    pin_id: &str,
+    pin_cid: &str,
+    worker_id: &str,
+    success: bool,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let mut client = connect_to_gevulot(chain_args).await?;
     let me = client
         .base_client
         .write()
@@ -51,40 +117,29 @@ pub async fn ack_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error
         .address
         .clone()
         .ok_or("No address found, did you set a mnemonic?")?;
-    let pin_id = _sub_m.get_one::<String>("id").ok_or("Pin ID is required")?;
-    let pin_cid = _sub_m
-        .get_one::<String>("cid")
-        .ok_or("Pin CID is required")?;
-    let worker_id = _sub_m.get_one::<String>("worker_id").ok_or("Worker ID is required")?;
-    let success = _sub_m.get_flag("success");
     client
         .pins
         .ack(
             MsgAckPinBuilder::default()
-                .id(pin_id.clone())
+                .id(pin_id.to_string())
                 .creator(me.clone())
-                .cid(pin_cid.clone())
-                .worker_id(worker_id.clone())
+                .cid(pin_cid.to_string())
+                .worker_id(worker_id.to_string())
                 .success(success)
                 .into_message()?,
         )
         .await?;
-    Ok(())
+    Ok(serde_json::json!({}))
 }
 
 /// Creates a new pin in the Gevulot network
-///
-/// This function reads pin data from a file, connects to the Gevulot network,
-/// and creates a new pin with the provided data.
-///
-/// # Arguments
-///
-/// * `_sub_m` - A reference to the ArgMatches struct containing parsed command-line arguments.
-///              This is used to access the file path for pin data and any additional options.
-pub async fn create_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
+async fn create_pin(
+    chain_args: &ChainArgs,
+    file: Option<&Path>,
+) -> Result<Value, Box<dyn std::error::Error>> {
     // Read pin data from file
-    let pin: gevulot_rs::models::Pin = read_file(_sub_m).await?;
-    let mut client = connect_to_gevulot(_sub_m).await?;
+    let pin: gevulot_rs::models::Pin = read_file(file).await?;
+    let mut client = connect_to_gevulot(chain_args).await?;
 
     // Get the client's address
     let me = client
@@ -114,28 +169,19 @@ pub async fn create_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::er
         )
         .await?;
 
-    // Replace println with print_object for consistent formatting
-    print_object(_sub_m, &serde_json::json!({
+    Ok(serde_json::json!({
         "status": "success",
         "message": format!("Created pin with id: {}", resp.id),
         "id": resp.id,
-    }))?;
-    Ok(())
+    }))
 }
 
 /// Deletes a pin from the Gevulot network
-///
-/// This function connects to the Gevulot network and deletes a pin specified by its CID.
-///
-/// # Arguments
-///
-/// * `_sub_m` - A reference to the ArgMatches struct containing parsed command-line arguments.
-///              This is used to access the CID of the pin to delete and any additional options.
-pub async fn delete_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    let pin_cid = _sub_m
-        .get_one::<String>("cid")
-        .ok_or("Pin CID is required")?;
-    let mut client = connect_to_gevulot(_sub_m).await?;
+async fn delete_pin(
+    chain_args: &ChainArgs,
+    pin_cid: &str,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let mut client = connect_to_gevulot(chain_args).await?;
 
     // Get the client's address
     let me = client
@@ -152,15 +198,13 @@ pub async fn delete_pin(_sub_m: &clap::ArgMatches) -> Result<(), Box<dyn std::er
         .delete(
             MsgDeletePinBuilder::default()
                 .creator(me.clone())
-                .cid(pin_cid.clone())
+                .cid(pin_cid.to_string())
                 .into_message()?,
         )
         .await?;
 
-    // Use print_object for consistent formatting
-    print_object(_sub_m, &serde_json::json!({
+    Ok(serde_json::json!({
         "status": "success",
         "message": format!("Deleted pin with CID: {}", pin_cid)
-    }))?;
-    Ok(())
+    }))
 }

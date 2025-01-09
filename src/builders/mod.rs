@@ -1,5 +1,7 @@
 use anyhow::Result;
 
+use crate::build::BuildArgs;
+
 pub mod nvidia;
 pub mod podman_builder;
 
@@ -102,15 +104,9 @@ impl std::fmt::Display for BuildOptions {
         writeln!(
             f,
             "| MIA Version      | {:<42} |",
-            self.mia_version
-                .as_deref()
-                .unwrap_or("None")
+            self.mia_version.as_deref().unwrap_or("None")
         )?;
-        writeln!(
-            f,
-            "| Gevulot runtime  | {:<42} |",
-            !self.no_gevulot_runtime
-        )?;
+        writeln!(f, "| Gevulot runtime  | {:<42} |", !self.no_gevulot_runtime)?;
         writeln!(f, "| Default mounts   | {:<42} |", !self.no_default_mounts)?;
         writeln!(
             f,
@@ -145,48 +141,40 @@ impl std::fmt::Display for BuildOptions {
     }
 }
 
-impl TryFrom<&clap::ArgMatches> for BuildOptions {
-    type Error = &'static str;
-
-    fn try_from(matches: &clap::ArgMatches) -> Result<Self, Self::Error> {
-        Ok(BuildOptions {
-            container_source: matches.get_one::<String>("container_source").cloned(),
-            rootfs_dir: matches.get_one::<String>("rootfs_dir").cloned(),
-            containerfile: matches.get_one::<String>("containerfile").cloned(),
-            image_size: matches
-                .get_one::<String>("image_size")
-                .ok_or("need image size")?
-                .to_string(),
-            kernel_version: matches
-                .get_one::<String>("kernel_version")
-                .ok_or("need kernel version")?
-                .to_string(),
-            kernel_url: matches.get_one::<String>("kernel_url").cloned(),
-            kernel_file: matches.get_one::<String>("kernel_file").cloned(),
-            nvidia_drivers: matches.get_flag("nvidia_drivers"),
-            kernel_modules: matches
-                .get_many::<String>("kernel_module")
-                .unwrap_or_default()
-                .cloned()
-                .collect::<Vec<_>>(),
-            mounts: matches
-                .get_many::<String>("mount")
-                .unwrap_or_default()
-                .cloned()
-                .collect::<Vec<_>>(),
-            mia_version: matches.get_one::<String>("mia_version").cloned(),
-            no_gevulot_runtime: matches.get_flag("no_gevulot_runtime"),
-            no_default_mounts: matches.get_flag("no_default_mounts"),
-            init: matches.get_one::<String>("init").cloned(),
-            init_args: matches.get_one::<String>("init_args").cloned(),
-            rw_root: matches.get_flag("rw_root"),
-            mbr_file: matches.get_one::<String>("mbr_file").cloned(),
-            output_file: matches
-                .get_one::<String>("output_file")
-                .unwrap()
-                .to_string(),
-            force: matches.get_flag("force"),
-            quiet: matches.get_flag("quiet"),
-        })
+impl From<&BuildArgs> for BuildOptions {
+    fn from(args: &BuildArgs) -> Self {
+        BuildOptions {
+            container_source: args.image.container.clone(),
+            rootfs_dir: args
+                .image
+                .rootfs_dir
+                .as_ref()
+                .map(|path| path.to_string_lossy().to_string()),
+            containerfile: args
+                .image
+                .containerfile
+                .as_ref()
+                .map(|path| path.to_string_lossy().to_string()),
+            image_size: args.image_size.clone(),
+            kernel_version: args.kernel_version.clone(),
+            kernel_url: Some(args.kernel_url.clone()),
+            kernel_file: args.kernel_file.clone(),
+            nvidia_drivers: args.nvidia_drivers,
+            kernel_modules: args.kernel_modules.clone(),
+            mounts: args.mounts.clone(),
+            mia_version: Some(args.mia_version.clone()),
+            no_gevulot_runtime: args.no_gevulot_runtime,
+            no_default_mounts: args.no_default_mounts,
+            init: args.init.clone(),
+            init_args: args.init_args.clone(),
+            rw_root: args.rw_root,
+            mbr_file: args
+                .mbr_file
+                .as_ref()
+                .map(|path| path.to_string_lossy().to_string()),
+            output_file: args.output_file.to_string_lossy().to_string(),
+            force: args.force,
+            quiet: args.quiet,
+        }
     }
 }
