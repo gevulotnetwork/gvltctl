@@ -31,7 +31,7 @@ impl ContainerImage {
         }
     }
 
-    /// Build container image using given Dockerfile and current directory as build context
+    /// Build container image using given Containerfile and current directory as build context
     /// and return created reference.
     ///
     /// `remove_on_drop` will be set to `true`.
