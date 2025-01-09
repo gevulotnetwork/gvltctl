@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use log::debug;
 use mia_installer::runtime_config::{self, RuntimeConfig};
-use oci_spec::image::ImageConfiguration;
+use oci_spec::image::Config;
 use std::io::{self, BufRead, BufReader, Write};
 use std::{env, fs, path::Path, process::Command};
 use tempdir::TempDir;
@@ -377,7 +377,7 @@ impl SkopeoSyslinuxBuilder {
         // Ensure all changes are written to disk
         Self::run_command(&["sync"], true).context("Failed to sync filesystem")?;
 
-        // Read image config.
+        // Extract image config.
         let config_path = target_dir.path().join("config.json");
         let config_path_str = config_path.to_str().unwrap();
         Self::run_command(
@@ -385,19 +385,28 @@ impl SkopeoSyslinuxBuilder {
                 "sh",
                 "-c",
                 &format!(
-                    "skopeo inspect --config {} > {}",
+                    "podman image inspect {} > {}",
                     container_source, config_path_str
                 ),
             ],
             false,
         )
         .context("Failed to extract image config")?;
-        let config = ImageConfiguration::from_file(&config_path)
-            .context("Failed to read image configuration")?;
-        log::debug!("unpacked config {}", config_path.display());
+        log::debug!("full image config dumped to {}", config_path.display());
+        let config_raw_data =
+            fs::read_to_string(config_path_str).context("Failed to read image config")?;
+        let config_json: serde_json::Value = serde_json::from_str(&config_raw_data)
+            .context("Failed to parse image config as JSON")?;
+        let config_inner_value: Option<&str> = config_json
+            .get(0)
+            .and_then(|item| item.get("Config").and_then(|c| c.as_str()));
+        let maybe_config: Option<Config> = config_inner_value
+            .map(serde_json::from_str)
+            .transpose()
+            .context("Failed to parse image config")?;
 
         // Extract runtime config from the container manifest.
-        if let Some(exec_params) = config.config() {
+        if let Some(exec_params) = maybe_config {
             // Add enviromnental variables
             if let Some(env_vars) = exec_params.env() {
                 for var in env_vars {
