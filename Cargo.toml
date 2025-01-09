@@ -42,3 +42,6 @@ shadow-rs = { version = "0.36", features = ["metadata"] }
 [features]
 # This feature should be enabled when building static executable
 openssl-vendored = ["openssl/vendored"]
+
+[patch.crates-io]
+gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs", rev = "9aad7a9cbea15e9007ff5b45a566212bdf853620" }

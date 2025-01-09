@@ -140,6 +140,7 @@ pub enum Command {
 
     /// Build a VM image from a container, rootfs directory, or Containerfile.
     Build(build::BuildArgs),
+
 }
 
 /// Main entry point for the Gevulot Control CLI application.
