@@ -1,4 +1,4 @@
-use crate::builders::skopeo_builder::SkopeoSyslinuxBuilder;
+use crate::builders::podman_builder::PodmanSyslinuxBuilder;
 use crate::builders::{BuildOptions, ImageBuilder};
 use crate::OutputFormat;
 use clap::ValueHint;
@@ -208,7 +208,7 @@ impl BuildArgs {
 
 async fn build(build_args: &BuildArgs) -> Result<(), Box<dyn std::error::Error>> {
     let options = BuildOptions::from(build_args);
-    let builder = SkopeoSyslinuxBuilder {};
+    let builder = PodmanSyslinuxBuilder {};
     builder.build(&options)?;
     Ok(())
 }
