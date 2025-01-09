@@ -1,4 +1,4 @@
-use crate::builders::skopeo_builder::SkopeoSyslinuxBuilder;
+use crate::builders::podman_builder::PodmanSyslinuxBuilder;
 use crate::builders::{BuildOptions, ImageBuilder};
 use anyhow::Result;
 use clap::{Arg, ArgGroup, ValueHint};
@@ -221,6 +221,6 @@ pub fn get_command() -> clap::Command {
 
 pub async fn build(matches: &clap::ArgMatches) -> Result<()> {
     let options = BuildOptions::try_from(matches).map_err(|e| anyhow::anyhow!(e))?;
-    let builder = SkopeoSyslinuxBuilder {};
+    let builder = PodmanSyslinuxBuilder {};
     builder.build(&options)
 }

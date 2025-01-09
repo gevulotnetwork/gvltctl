@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 pub mod nvidia;
-pub mod skopeo_builder;
+pub mod podman_builder;
 
 pub trait ImageBuilder {
     fn build(&self, options: &BuildOptions) -> Result<()>;

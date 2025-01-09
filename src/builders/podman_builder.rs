@@ -12,9 +12,9 @@ use super::nvidia;
 
 const TEMP_CONTAINER_NAME: &str = "gevulot-temp-container";
 
-pub struct SkopeoSyslinuxBuilder {}
+pub struct PodmanSyslinuxBuilder {}
 
-impl ImageBuilder for SkopeoSyslinuxBuilder {
+impl ImageBuilder for PodmanSyslinuxBuilder {
     fn build(&self, options: &BuildOptions) -> Result<()> {
         // Handle printing messages with regard to `quiet` option.
         let print = |line: &str| -> Result<()> {
@@ -180,7 +180,7 @@ impl ImageBuilder for SkopeoSyslinuxBuilder {
     }
 }
 
-impl SkopeoSyslinuxBuilder {
+impl PodmanSyslinuxBuilder {
     // Create an empty disk image file of the specified size
     fn create_disk_image(size: &str, output_file: &str) -> Result<()> {
         Self::run_command(&["truncate", "-s", size, output_file], false)
