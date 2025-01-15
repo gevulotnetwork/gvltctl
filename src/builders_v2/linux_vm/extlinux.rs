@@ -1,8 +1,8 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use log::{debug, info};
 use std::ffi::OsStr;
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{self, Path, PathBuf};
 
 use crate::builders::Step;
@@ -12,12 +12,6 @@ use super::utils::run_command;
 use super::{InitSystemOpts, LinuxVMBuildContext};
 
 const DEFAULT_EXTLINUX_DIR: &str = "/boot/extlinux";
-
-/// This boot code is copied from extlinux 6.04.
-const BOOTCODE: &[u8; 440] = include_bytes!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/src/builders_v2/linux_vm/data/extlinux/mbr.bin"
-));
 
 /// EXTLINUX wrapper.
 #[derive(Clone, Debug)]
@@ -44,6 +38,30 @@ impl Extlinux {
         self.directory()
             .strip_prefix(path::MAIN_SEPARATOR_STR)
             .context("failed to stip prefix from extlinux target directory")
+    }
+
+    /// Get path to `mbr.bin` file of EXTLINUX, e.g. `/usr/share/syslinux/mbr.bin`.
+    ///
+    /// This function will try a number of paths and return `None`, if none of them succeeds.
+    pub fn mbr_bin_path() -> Option<PathBuf> {
+        const CANDIDATES: &[&str] = &[
+            "/usr/share/extlinux/mbr.bin",
+            "/usr/share/syslinux/mbr.bin",
+            "/usr/lib/extlinux/mbr/mbr.bin",
+            "/usr/lib/syslinux/mbr/mbr.bin",
+            "/usr/lib/extlinux/bios/mbr.bin",
+            "/usr/lib/syslinux/bios/mbr.bin",
+        ];
+        CANDIDATES
+            .into_iter()
+            .map(PathBuf::from)
+            .find_map(|candidate| {
+                if candidate.exists() {
+                    return Some(candidate);
+                } else {
+                    return None;
+                }
+            })
     }
 
     /// Install EXTLINUX.
@@ -96,12 +114,25 @@ impl Step<LinuxVMBuildContext> for InstallExtlinux {
         let extlinux = Extlinux::install(DEFAULT_EXTLINUX_DIR, &mountpoint)
             .context("failed to install EXTLINUX")?;
 
+        let mbr_path = if let Some(mbr_path) = &ctx.opts().mbr_file {
+            mbr_path.clone()
+        } else if let Some(mbr_path) = Extlinux::mbr_bin_path() {
+            mbr_path
+        } else {
+            bail!("cannot install EXTLINUX: MBR bootcode file not found");
+        };
+        let mut bootcode = [0u8; Mbr::BOOTCODE_SIZE];
+        fs::File::open(&mbr_path)
+            .context("failed to open MBR bootcode file")?
+            .read_exact(&mut bootcode)
+            .context("failed to read MBR bootcode file")?;
+
         let mbr = ctx
             .get_mut::<Mbr>("mbr")
             .ok_or(anyhow!("cannot install EXTLINUX: MBR not found"))?;
 
-        debug!("writing MBR bootcode");
-        mbr.write_bootcode(BOOTCODE.clone())
+        debug!("writing MBR bootcode from {}", mbr_path.display());
+        mbr.write_bootcode(bootcode)
             .context("failed to write MBR bootcode")?;
 
         ctx.set("extlinux", Box::new(extlinux));
