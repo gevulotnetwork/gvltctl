@@ -171,6 +171,9 @@ pub struct BuildOpts {
     /// Create image from scratch (don't use base VM image).
     pub from_scratch: bool,
 
+    /// MBR bootcode file.
+    pub mbr_file: Option<PathBuf>,
+
     /// Mount root filesystem as read-write.
     pub rw_root: bool,
 
