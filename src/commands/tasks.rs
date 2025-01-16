@@ -8,7 +8,6 @@ use gevulot_rs::builders::{
     MsgFinishTaskBuilder, MsgRescheduleTaskBuilder,
 };
 
-
 use crate::{connect_to_gevulot, print_object, read_file, ChainArgs, OutputFormat};
 
 /// Tasks command.
@@ -55,12 +54,8 @@ impl Command {
                 )
                 .await
             }
-            Subcommand::Reschedule { id } => {
-                reschedule_task(&self.chain_args, id).await
-            }
-            Subcommand::Delete { id } => {
-                delete_task(&self.chain_args, id).await
-            }
+            Subcommand::Reschedule { id } => reschedule_task(&self.chain_args, id).await,
+            Subcommand::Delete { id } => delete_task(&self.chain_args, id).await,
         }?;
         print_object(format, &value)
     }
@@ -366,10 +361,13 @@ pub async fn delete_task(
         .clone()
         .ok_or("No address found, did you set a mnemonic?")?;
 
-    client.tasks.delete(gevulot_rs::proto::gevulot::gevulot::MsgDeleteTask{
-        creator: me.clone(),
-        id: task_id.to_string(),
-    }).await?;
+    client
+        .tasks
+        .delete(gevulot_rs::proto::gevulot::gevulot::MsgDeleteTask {
+            creator: me.clone(),
+            id: task_id.to_string(),
+        })
+        .await?;
 
     Ok(serde_json::json!({
         "status": "success",
