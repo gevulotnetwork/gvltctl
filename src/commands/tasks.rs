@@ -54,9 +54,8 @@ impl Command {
                 )
                 .await
             }
-            Subcommand::Reschedule { id } => {
-                reschedule_task(&self.chain_args, id).await
-            }
+            Subcommand::Reschedule { id } => reschedule_task(&self.chain_args, id).await,
+            Subcommand::Delete { id } => delete_task(&self.chain_args, id).await,
         }?;
         print_object(format, &value)
     }
@@ -127,6 +126,12 @@ enum Subcommand {
     /// Reschedule a task.
     Reschedule {
         /// The ID of the task to reschedule.
+        id: String,
+    },
+
+    /// Delete a task.
+    Delete {
+        /// The ID of the task to delete.
         id: String,
     },
 }
@@ -340,5 +345,32 @@ pub async fn reschedule_task(
         "message": "Task rescheduled successfully",
         "primary": resp.primary,
         "secondary": resp.secondary
+    }))
+}
+
+pub async fn delete_task(
+    chain_args: &ChainArgs,
+    task_id: &str,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let mut client = connect_to_gevulot(chain_args).await?;
+    let me = client
+        .base_client
+        .write()
+        .await
+        .address
+        .clone()
+        .ok_or("No address found, did you set a mnemonic?")?;
+
+    client
+        .tasks
+        .delete(gevulot_rs::proto::gevulot::gevulot::MsgDeleteTask {
+            creator: me.clone(),
+            id: task_id.to_string(),
+        })
+        .await?;
+
+    Ok(serde_json::json!({
+        "status": "success",
+        "message": "Task deleted successfully"
     }))
 }
