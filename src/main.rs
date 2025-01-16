@@ -8,6 +8,8 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
+#[cfg_attr(not(feature = "vm-builder-v2"), path = "builders/mod.rs")]
+#[cfg_attr(feature = "vm-builder-v2", path = "builders_v2/mod.rs")]
 mod builders;
 mod commands;
 mod utils;
@@ -148,6 +150,7 @@ pub enum Command {
 /// and dispatches to the appropriate subcommand handlers.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::init();
     Cli::parse().run().await
 }
 
