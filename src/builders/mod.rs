@@ -155,7 +155,7 @@ impl From<&BuildArgs> for BuildOptions {
                 .containerfile
                 .as_ref()
                 .map(|path| path.to_string_lossy().to_string()),
-            image_size: args.image_size.clone(),
+            image_size: args.image_size.clone().unwrap_or("10G".to_string()),
             kernel_version: args.kernel_version.clone(),
             kernel_url: Some(args.kernel_url.clone()),
             kernel_file: args.kernel_file.clone(),

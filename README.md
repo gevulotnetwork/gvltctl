@@ -47,6 +47,32 @@ To compile `gvltclt` crate you will need following dependencies:
 cargo install --git https://github.com/gevulotnetwork/gvltctl.git --tag $VERSION
 ```
 
+### Runtime dependencies
+
+To use `gvltctl` install following dependencies:
+
+- `ca-certificates`
+
+#### `gvltctl build`
+
+`gvltctl build` needs additional dependencies.
+
+To operate on containers:
+
+- `podman` or `docker` (see `--container-backend` option)
+
+To build Linux kernel from sources (not needed if using pre-compiled kernel with `--kernel-file`):
+
+- `git build-essential libncurses-dev gawk flex bison openssl libssl-dev dkms libelf-dev libudev-dev libpci-dev libiberty-dev autoconf llvm bc`
+
+To operate on VM filesystem:
+
+- `e2fsprogs`
+
+To mount VM filesystem using FUSE (see `--fuse` option):
+
+- `fuse2fs`
+
 ## Usage
 
 ```plain
