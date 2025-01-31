@@ -267,11 +267,11 @@ impl BuildArgs {
 
 #[cfg(not(feature = "vm-builder-v2"))]
 async fn build(build_args: &BuildArgs) -> Result<Value, Box<dyn std::error::Error>> {
-    use crate::builders::skopeo_builder::SkopeoSyslinuxBuilder;
+    use crate::builders::podman_builder::PodmanSyslinuxBuilder;
     use crate::builders::{BuildOptions, ImageBuilder};
 
     let options = BuildOptions::from(build_args);
-    let builder = SkopeoSyslinuxBuilder {};
+    let builder = PodmanSyslinuxBuilder {};
     builder.build(&options)?;
 
     Ok(serde_json::json!({

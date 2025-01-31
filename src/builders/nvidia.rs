@@ -5,7 +5,7 @@ use log::{debug, info};
 use tempdir::TempDir;
 use thiserror::Error;
 
-use crate::builders::skopeo_builder::SkopeoSyslinuxBuilder;
+use crate::builders::podman_builder::PodmanSyslinuxBuilder;
 
 #[derive(Error, Debug)]
 pub enum NvidiaError {
@@ -139,7 +139,7 @@ fn run_driver_container(
     let kernel_source_copy_str = path_to_str(kernel_source_copy.path())?;
     let target_dir_str = path_to_str(target_dir.path())?;
 
-    SkopeoSyslinuxBuilder::run_command(
+    PodmanSyslinuxBuilder::run_command(
         &[
             "podman",
             "run",
@@ -171,7 +171,7 @@ fn prepare_vm_modules_dir<P: AsRef<Path>>(
         let vm_modules_dir_str = path_to_str(&vm_modules_dir)?;
         // NOTE: We cannot use plain `fs::create_dir_all`, as skopeo creates root-owned directory for the VM.
         // This could be fixed in the future with a template + chown.
-        SkopeoSyslinuxBuilder::run_command(
+        PodmanSyslinuxBuilder::run_command(
             &["sh", "-c", &format!("mkdir -p {}", vm_modules_dir_str)],
             true,
         )
@@ -226,7 +226,7 @@ fn build_module_dependencies<P: AsRef<Path>>(
     let vm_root_path_str = path_to_str(vm_root_path.as_ref())?;
     // NOTE: We have to use sudo, as skopeo creates root-owned directory for the VM.
     // This could be fixed in the future with a template + chown.
-    SkopeoSyslinuxBuilder::run_command(
+    PodmanSyslinuxBuilder::run_command(
         &[
             "depmod",
             "--basedir",
@@ -251,7 +251,7 @@ fn copy_file<P: AsRef<Path>>(
 
     // NOTE: We cannot use plain `fs::copy`, as skopeo creates root-owned directory for the VM.
     // This could be fixed in the future with a template + chown.
-    SkopeoSyslinuxBuilder::run_command(
+    PodmanSyslinuxBuilder::run_command(
         &[
             "sh",
             "-c",

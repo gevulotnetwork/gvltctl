@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use log::debug;
 use mia_installer::runtime_config::{self, RuntimeConfig};
-use oci_spec::image::{ImageConfiguration, ImageManifest};
+use oci_spec::image::Config;
 use std::io::{self, BufRead, BufReader, Write};
 use std::{env, fs, path::Path, process::Command};
 use tempdir::TempDir;
@@ -10,9 +10,11 @@ use crate::builders::{BuildOptions, ImageBuilder};
 
 use super::nvidia;
 
-pub struct SkopeoSyslinuxBuilder {}
+const TEMP_CONTAINER_NAME: &str = "gevulot-temp-container";
 
-impl ImageBuilder for SkopeoSyslinuxBuilder {
+pub struct PodmanSyslinuxBuilder {}
+
+impl ImageBuilder for PodmanSyslinuxBuilder {
     fn build(&self, options: &BuildOptions) -> Result<()> {
         // Handle printing messages with regard to `quiet` option.
         let print = |line: &str| -> Result<()> {
@@ -178,7 +180,7 @@ impl ImageBuilder for SkopeoSyslinuxBuilder {
     }
 }
 
-impl SkopeoSyslinuxBuilder {
+impl PodmanSyslinuxBuilder {
     // Create an empty disk image file of the specified size
     fn create_disk_image(size: &str, output_file: &str) -> Result<()> {
         Self::run_command(&["truncate", "-s", size, output_file], false)
@@ -310,60 +312,52 @@ impl SkopeoSyslinuxBuilder {
         // This temp dir will be removed on dropping.
         let target_dir = TempDir::new("").context("Failed to create temporary directory")?;
 
-        // Copy the container image to a directory
+        // Create a container to obtain full filesystem, instead of dealing with layers.
         Self::run_command(
             &[
-                "skopeo",
-                "copy",
+                "podman",
+                "create",
+                "--replace",
+                "--name",
+                TEMP_CONTAINER_NAME,
                 container_source,
-                &format!("dir:{}", target_dir.path().display()),
             ],
             false,
         )
-        .context("Failed to copy container image")?;
+        .context("Failed to create container")?;
 
-        // Read image manifest
-        let manifest = ImageManifest::from_file(target_dir.path().join("manifest.json"))
-            .context("Failed to read image manifest")?;
+        // Export archive with the container filesystem
+        let output_file = target_dir.path().join("rootfs.tar");
+        let output_file_str = output_file.to_str().unwrap();
+        Self::run_command(
+            &[
+                "podman",
+                "export",
+                TEMP_CONTAINER_NAME,
+                "-o",
+                output_file_str,
+            ],
+            false,
+        )
+        .context("Failed to extract container filesystem")?;
 
-        // Extract all layers of image into target dir
-        for layer in manifest.layers() {
-            let layer_path = target_dir.path().join(layer.digest().digest());
-            log::debug!(
-                "unpack layer {} from {}",
-                layer.digest(),
-                layer_path.display()
-            );
-            // Unpack with root permissions
-            match Self::run_command(
-                &[
-                    "tar",
-                    "-xf",
-                    layer_path.to_str().unwrap(),
-                    "-C",
-                    target_dir.path().to_str().unwrap(),
-                ],
-                true,
-            ) {
-                Ok(_) => {
-                    log::debug!("remove layer {}", layer_path.display());
-                    fs::remove_file(&layer_path).context("Failed to remove layer file")?;
-                    log::debug!("removed layer {}", layer_path.display());
-                }
-                Err(_) => {
-                    log::warn!("Failed to unpack layer"); // TODO: Investigate why this happens.
-                }
-            };
-        }
+        // Remove container - it is no longer necessary as we got filesystem dump.
+        Self::remove_temporary_container().context("Failed to remove container")?;
 
-        log::debug!("unpacked all layers");
+        // Unpack with root permissions
+        Self::run_command(
+            &[
+                "tar",
+                "-xf",
+                output_file_str,
+                "-C",
+                target_dir.path().to_str().unwrap(),
+            ],
+            true,
+        )
+        .context("Failed to unpack container filesystem")?;
 
-        let config_path = target_dir.path().join(manifest.config().digest().digest());
-        let config = ImageConfiguration::from_file(&config_path)
-            .context("Failed to read image configuration")?;
-        log::debug!("unpacked config {}", config_path.display());
-        fs::remove_file(&config_path).context("Failed to remove config file")?;
-        log::debug!("removed config {}", config_path.display());
+        log::debug!("unpacked container image");
 
         // Copy the extracted rootfs to the mounted filesystem
         Self::run_command(
@@ -383,8 +377,36 @@ impl SkopeoSyslinuxBuilder {
         // Ensure all changes are written to disk
         Self::run_command(&["sync"], true).context("Failed to sync filesystem")?;
 
+        // Extract image config.
+        let config_path = target_dir.path().join("config.json");
+        let config_path_str = config_path.to_str().unwrap();
+        Self::run_command(
+            &[
+                "sh",
+                "-c",
+                &format!(
+                    "podman image inspect {} > {}",
+                    container_source, config_path_str
+                ),
+            ],
+            false,
+        )
+        .context("Failed to extract image config")?;
+        log::debug!("full image config dumped to {}", config_path.display());
+        let config_raw_data =
+            fs::read_to_string(config_path_str).context("Failed to read image config")?;
+        let config_json: serde_json::Value = serde_json::from_str(&config_raw_data)
+            .context("Failed to parse image config as JSON")?;
+        let config_inner_value: Option<&str> = config_json
+            .get(0)
+            .and_then(|item| item.get("Config").and_then(|c| c.as_str()));
+        let maybe_config: Option<Config> = config_inner_value
+            .map(serde_json::from_str)
+            .transpose()
+            .context("Failed to parse image config")?;
+
         // Extract runtime config from the container manifest.
-        if let Some(exec_params) = config.config() {
+        if let Some(exec_params) = maybe_config {
             // Add enviromnental variables
             if let Some(env_vars) = exec_params.env() {
                 for var in env_vars {
@@ -903,6 +925,8 @@ LABEL linux
             ],
             true,
         );
+        // Remove pending container if any.
+        _ = Self::remove_temporary_container();
         // Detach all unused loop devices
         _ = Self::run_command(&["losetup", "-D"], true);
         log::debug!(
@@ -972,5 +996,9 @@ LABEL linux
                 output.status
             ))
         }
+    }
+
+    fn remove_temporary_container() -> Result<()> {
+        Self::run_command(&["podman", "rm", TEMP_CONTAINER_NAME], false)
     }
 }
