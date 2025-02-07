@@ -96,7 +96,7 @@ impl NvidiaDriversFs {
         // Put main `nvidia.ko` driver, and additional `nvidia-uvm.ko`.
         // NOTE: Target path is **quite** different than source one.
         debug!("Copying main NVIDIA driver into VM filesystem.");
-        let driver_names = vec!["nvidia.ko".to_string(), "nvidia-uvm.ko".to_string()];
+        let driver_names = vec!["nvidia".to_string(), "nvidia-uvm".to_string()];
         for driver_name in &driver_names {
             copy_nvidia_driver(
                 &self.target_dir,
@@ -195,17 +195,18 @@ fn copy_nvidia_driver<P: AsRef<Path>>(
     kernel_release: &str,
     driver_name: &str,
 ) -> Result<(), NvidiaError> {
+    let driver_name = format!("{}.ko", driver_name);
     let source_path = target_dir
         .path()
         .join("usr/lib/modules")
         .join(kernel_release)
         .join("video")
-        .join(driver_name);
+        .join(&driver_name);
     let target_path = vm_root_path
         .as_ref()
         .join("lib/modules")
         .join(kernel_release)
-        .join(driver_name);
+        .join(&driver_name);
 
     fs::copy(source_path, target_path)?;
 
