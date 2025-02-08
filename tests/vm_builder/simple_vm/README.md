@@ -16,7 +16,6 @@ Is has pre-compiled Linux kernel v6.12 (`bzImage`) and "Hello world" application
 
     ```shell
     ../../../target/debug/gvltctl build \
-        --fuse \
         --containerfile Containerfile \
         --kernel-file bin/bzImage \
         --no-gevulot-runtime
