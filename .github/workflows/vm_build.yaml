@@ -88,7 +88,7 @@ jobs:
       # We are using pre-compiled kernel in tests, so we don't need Linux kernel build dependencies.
       - name: Install VM builder runtime dependencies
         run: |-
-          sudo apt-get install -y podman e2fsprogs fuse2fs
+          sudo apt-get install -y podman
 
       - name: Install QEMU
         run: |-
@@ -97,11 +97,10 @@ jobs:
       - name: Build test VM image
         working-directory: tests/vm_builder/simple_vm
         env:
-          RUST_LOG: trace
+          RUST_LOG: gvltctl=trace
         run: |-
           chmod +x ./gvltctl
           ./gvltctl build \
-            --fuse \
             --containerfile Containerfile \
             --kernel-file bin/bzImage \
             --no-gevulot-runtime
