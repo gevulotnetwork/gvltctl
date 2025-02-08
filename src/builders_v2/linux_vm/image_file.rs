@@ -11,16 +11,24 @@ use crate::builders::Step;
 
 use super::{LinuxVMBuildContext, BASE_IMAGE};
 
-/// Image file.
+/// Image file adapter.
 #[derive(Clone, Debug)]
 pub struct ImageFile {
     /// Path to the file.
     path: PathBuf,
+
+    /// Whether the image can be resized or not.
+    resizable: bool,
 }
 
 impl ImageFile {
+    /// Size of the image created initially, when size is not specified by user.
+    ///
+    /// This will be enough to create MBR.
+    pub const MIN_IMAGE_SIZE: u64 = ByteSize::mib(1).as_u64();
+
     /// Create new image file with given size.
-    pub fn create<P>(path: P, size: u64, overwrite: bool) -> Result<Self>
+    pub fn create<P>(path: P, size: Option<u64>, overwrite: bool) -> Result<Self>
     where
         P: AsRef<Path>,
     {
@@ -28,10 +36,13 @@ impl ImageFile {
             if overwrite {
                 fs::remove_file(&path).context("failed to remove image file")?;
             } else {
-                bail!("Output file '{}' already exists.", path.as_ref().display());
+                bail!("output file '{}' already exists", path.as_ref().display());
             }
         }
         let mut file = File::create_new(&path).context("failed to create image file")?;
+
+        let resizable = size.is_none();
+        let size = size.unwrap_or(Self::MIN_IMAGE_SIZE);
 
         // This will create sparse file on Linux
         // TODO: research this on other platforms
@@ -42,37 +53,58 @@ impl ImageFile {
 
         Ok(Self {
             path: path.as_ref().to_path_buf(),
+            resizable,
         })
     }
 
     /// Use existing image file.
-    pub fn from_existing<P1, P2>(source: P1, path: P2, overwrite: bool) -> Result<Self>
+    pub fn from_existing<P1, P2>(
+        source: P1,
+        path: P2,
+        size: Option<u64>,
+        overwrite: bool,
+    ) -> Result<Self>
     where
         P1: AsRef<Path>,
         P2: AsRef<Path>,
     {
         if path.as_ref().exists() && !overwrite {
-            bail!("Output file '{}' already exists.", path.as_ref().display());
+            bail!("output file '{}' already exists", path.as_ref().display());
         }
-        fs::copy(source.as_ref(), path.as_ref()).context("failed to copy image file")?;
-        Ok(Self {
+        let base_image_size =
+            fs::copy(source.as_ref(), path.as_ref()).context("failed to copy base image file")?;
+        let resizable = size.is_none();
+        let image = Self {
             path: path.as_ref().to_path_buf(),
-        })
+            resizable,
+        };
+        if let Some(size) = size {
+            if base_image_size > size {
+                // We don't want to emit error on this action
+                let _ = fs::remove_file(path.as_ref());
+                bail!("not enough space on disk image");
+            }
+            image.extend(size - base_image_size)?;
+        }
+        Ok(image)
     }
 
-    /// Extend file returning old size.
-    pub fn extend(&mut self, value: ByteSize) -> Result<ByteSize> {
+    /// Extend file by `value` returning old size.
+    pub fn extend(&self, value: u64) -> Result<u64> {
+        let current_size = self.size()?;
+
+        if value == 0 {
+            return Ok(current_size);
+        }
+
         let mut file = OpenOptions::new()
-            .append(true)
+            .write(true)
             .open(&self.path)
             .context("failed to open image file")?;
 
-        let current_size = self.size()?;
-
-        ByteSize::b(
-            file.seek(SeekFrom::Current(value.0 as i64 - 1))
-                .context("failed to seek for image size")?,
-        );
+        let current_pos = file.seek(SeekFrom::End(0))?;
+        file.seek(SeekFrom::Start(current_pos + value - 1))
+            .context("failed to seek for image size")?;
         file.write_all(&[0])
             .context("failed to extend image file")?;
 
@@ -89,10 +121,15 @@ impl ImageFile {
         self.path.as_path()
     }
 
+    /// Whether the image can be resized or not.
+    pub fn resizable(&self) -> bool {
+        self.resizable
+    }
+
     /// Current size of the file.
-    pub fn size(&self) -> Result<ByteSize> {
+    pub fn size(&self) -> Result<u64> {
         let meta = fs::metadata(&self.path).context("failed to get image file metadata")?;
-        Ok(ByteSize::b(meta.len()))
+        Ok(meta.len())
     }
 }
 
@@ -116,7 +153,10 @@ pub struct CreateImageFile;
 
 impl Step<LinuxVMBuildContext> for CreateImageFile {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
-        info!("creating image file");
+        info!(
+            "creating image file: {}",
+            ctx.opts().image_file_opts.path.display()
+        );
         let image_file = ImageFile::create(
             &ctx.opts().image_file_opts.path,
             ctx.opts().image_file_opts.size,
@@ -125,7 +165,7 @@ impl Step<LinuxVMBuildContext> for CreateImageFile {
         debug!(
             "image file created: {} ({})",
             &image_file,
-            image_file.size()?
+            ByteSize::b(image_file.size()?),
         );
         ctx.set("image-file", Box::new(image_file));
         Ok(())
@@ -153,6 +193,7 @@ impl Step<LinuxVMBuildContext> for UseImageFile {
         let image_file = ImageFile::from_existing(
             &base_image_path,
             &ctx.opts().image_file_opts.path,
+            ctx.opts().image_file_opts.size,
             ctx.opts().image_file_opts.force,
         )?;
         debug!(
@@ -164,3 +205,65 @@ impl Step<LinuxVMBuildContext> for UseImageFile {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ImageFile;
+    use anyhow::Result;
+    use tempdir::TempDir;
+
+    #[test]
+    fn test_image_file_create_fixed() -> Result<()> {
+        let tmp = TempDir::new("image-file-tests")?;
+        let path = tmp.path().join("test");
+        let size = 3;
+
+        let image = ImageFile::create(path.clone(), Some(size), false)?;
+        assert!(path.is_file());
+        assert_eq!(image.size()?, size);
+        assert!(!image.resizable());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_image_file_create_default() -> Result<()> {
+        let tmp = TempDir::new("image-file-tests")?;
+        let path = tmp.path().join("test");
+
+        let image = ImageFile::create(path.clone(), None, false)?;
+        assert!(path.is_file());
+        assert_eq!(image.size()?, ImageFile::MIN_IMAGE_SIZE);
+        assert!(image.resizable());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_image_file_delete() -> Result<()> {
+        let tmp = TempDir::new("image-file-tests")?;
+        let path = tmp.path().join("test");
+
+        let image = ImageFile::create(path.clone(), None, false)?;
+        assert!(path.is_file());
+        image.delete()?;
+        assert!(!path.exists());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_image_file_resize() -> Result<()> {
+        let tmp = TempDir::new("image-file-tests")?;
+        let path = tmp.path().join("test");
+        let extend = 5;
+
+        let image = ImageFile::create(path.clone(), None, false)?;
+        image.extend(extend)?;
+        assert_eq!(image.size()?, ImageFile::MIN_IMAGE_SIZE + extend);
+
+        Ok(())
+    }
+}
+
+// TODO: clarify what's going on with `resizable`

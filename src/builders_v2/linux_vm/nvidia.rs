@@ -10,7 +10,7 @@ use crate::builders::linux_vm::kernel::Kernel;
 use crate::builders::linux_vm::utils::run_command;
 use crate::builders::Step;
 
-use super::{LinuxVMBuildContext, LinuxVMBuilderError};
+use super::LinuxVMBuildContext;
 
 #[derive(Error, Debug)]
 pub enum NvidiaError {
@@ -290,12 +290,7 @@ pub struct BuildDrivers;
 impl Step<LinuxVMBuildContext> for BuildDrivers {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         info!("building NVIDIA drivers");
-        let kernel = ctx
-            .get::<Kernel>("kernel")
-            .ok_or(LinuxVMBuilderError::invalid_context(
-                "install NVIDIA drivers",
-                "Linux kernel handler",
-            ))?;
+        let kernel = ctx.get::<Kernel>("kernel").expect("kernel");
 
         // TODO: should we return error in this case or not?
         if kernel.is_precompiled() {
@@ -330,7 +325,7 @@ impl Step<LinuxVMBuildContext> for BuildDrivers {
 /// Requires kernel compiled from sources.
 ///
 /// # Context variables required
-/// - `mountpoint`
+/// - `root-fs`
 /// - `nvidia-drivers` (if not found, nothing will be installed)
 ///
 /// # Context variables defined
@@ -341,20 +336,15 @@ impl Step<LinuxVMBuildContext> for InstallDrivers {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         // If there are no drivers, just skip installation.
         // This happens in case of pre-compiled kernel.
-        if let Some(nvidia_drivers) = ctx.0.get::<NvidiaDriversFs>("nvidia-drivers") {
+        if let Some(nvidia_drivers) = ctx.get::<NvidiaDriversFs>("nvidia-drivers") {
             info!("installing NVIDIA drivers");
-            let mountpoint =
-                ctx.get::<PathBuf>("mountpoint")
-                    .ok_or(LinuxVMBuilderError::invalid_context(
-                        "install NVIDIA drivers",
-                        "mountpoint",
-                    ))?;
+            let rootfs = ctx.get::<PathBuf>("root-fs").expect("root-fs");
 
             let mut driver_names = nvidia_drivers
-                .install(mountpoint)
+                .install(rootfs)
                 .context("failed to install NVIDIA drivers")?;
 
-            if let Some(kernel_modules) = ctx.0.get_mut::<Vec<String>>("kernel-modules") {
+            if let Some(kernel_modules) = ctx.get_mut::<Vec<String>>("kernel-modules") {
                 kernel_modules.append(&mut driver_names);
             } else {
                 // If no modules were added before, create them

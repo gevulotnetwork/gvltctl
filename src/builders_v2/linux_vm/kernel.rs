@@ -3,12 +3,15 @@ use bytesize::ByteSize;
 use log::{debug, info, trace};
 use std::ffi::OsStr;
 use std::path::{self, Path, PathBuf};
-use std::{fmt, fs};
+use std::{fmt, fs, io};
 
+use crate::builders::linux_vm::filesystem::fat32::Fat32;
+use crate::builders::linux_vm::image_file::ImageFile;
+use crate::builders::linux_vm::mbr::{try_resize_to_fit_into, Mbr};
 use crate::builders::Step;
 
 use super::utils::run_command;
-use super::{LinuxVMBuildContext, LinuxVMBuilderError};
+use super::LinuxVMBuildContext;
 
 /// Linux kernel.
 #[derive(Debug)]
@@ -19,7 +22,7 @@ pub enum Kernel {
         path: PathBuf,
 
         /// Size of the kernel file.
-        size: ByteSize,
+        size: u64,
     },
 
     /// Kernel compiled from sources.
@@ -37,7 +40,7 @@ pub enum Kernel {
         path: PathBuf,
 
         /// Size of the kernel file.
-        size: ByteSize,
+        size: u64,
     },
 }
 
@@ -69,7 +72,7 @@ impl Kernel {
     }
 
     /// Size of kernel binary.
-    pub fn size(&self) -> ByteSize {
+    pub fn size(&self) -> u64 {
         match self {
             Self::Precompiled { size, .. } => *size,
             Self::Sources { size, .. } => *size,
@@ -235,14 +238,14 @@ impl Kernel {
             version: version.to_string(),
             source_path: PathBuf::from(&kernel_dir),
             path: PathBuf::from(&bzimage_path),
-            size: ByteSize::b(metadata.len()),
+            size: metadata.len(),
         })
     }
 
     /// Use precompiled kernel.
     pub fn precompiled(path: PathBuf) -> Result<Self> {
         let metadata = fs::metadata(&path).context("get kernel file metadata")?;
-        let size = ByteSize::b(metadata.len());
+        let size = metadata.len();
         Ok(Self::Precompiled { path, size })
     }
 }
@@ -270,7 +273,11 @@ impl Step<LinuxVMBuildContext> for Build {
         info!("building Linux kernel");
         let kernel = Kernel::build(&self.repository_url, &self.version)
             .context("failed to build Linux kernel")?;
-        debug!("kernel built: {} ({} bytes)", &kernel, kernel.size());
+        info!(
+            "kernel ready: {} ({})",
+            &kernel,
+            ByteSize::b(kernel.size()).to_string_as(true)
+        );
         ctx.set("kernel", Box::new(kernel));
         Ok(())
     }
@@ -292,58 +299,106 @@ impl Precompiled {
 
 impl Step<LinuxVMBuildContext> for Precompiled {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
-        info!("using precompiled Linux kernel");
         let kernel = Kernel::precompiled(self.file.clone())?;
-        debug!("precompiled kernel: {} ({} bytes)", &kernel, kernel.size());
+        info!(
+            "using precompiled Linux kernel: {} ({})",
+            &kernel,
+            ByteSize::b(kernel.size()).to_string_as(true)
+        );
         ctx.set("kernel", Box::new(kernel));
         Ok(())
     }
 }
 
-/// Install Linux kernel into VM.
+/// Install Linux kernel into VM boot filesystem.
+///
+/// Only [`Fat32`] is supported now.
 ///
 /// # Context variables required
 /// - `kernel`
-/// - `mountpoint`
+/// - `image-file`
+/// - `boot-partition-number`
 ///
 /// # Context variables defined
-/// - `installed-kernel`
+/// - `installed-kernel`: [`PathBuf`] - an absolute path **inside VM** of installed kernel,
+/// e.g. `/boot/bzImage`
 pub struct Install;
 
 impl Step<LinuxVMBuildContext> for Install {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
-        let kernel = ctx
-            .0
-            .get::<Kernel>("kernel")
-            .ok_or(LinuxVMBuilderError::invalid_context(
-                "install kernel",
-                "kernel handler",
-            ))?;
+        let kernel = ctx.get::<Kernel>("kernel").expect("kernel");
         info!("installing kernel: {}", kernel.path().display());
 
-        let mountpoint =
-            ctx.0
-                .get::<PathBuf>("mountpoint")
-                .ok_or(LinuxVMBuilderError::invalid_context(
-                    "install kernel",
-                    "mountpoint",
-                ))?;
+        let image_file = ctx.get::<ImageFile>("image-file").expect("image-file");
+        let boot_partition_number = *ctx
+            .get::<usize>("boot-partition-number")
+            .expect("boot-partition-number");
+
+        let mbr_adapter = Mbr::read_from(image_file.path()).context("failed to read MBR")?;
+        let mbr = mbr_adapter.mbr().context("failed to read MBR")?;
+        let current_partition_size = mbr[boot_partition_number].sectors;
+        let sector_size = mbr.sector_size;
+
+        // Number of sectors required to store kernel
+        let kernel_size = u32::try_from(kernel.size() / sector_size as u64)
+            .context("kernel file is too big for MBR")?
+            + 1;
+        trace!("sectors required for kernel: {}s", kernel_size);
+
+        // We add current partition size to preserve this, because it may already be
+        // used to store bootloader and filesystem metadata.
+        let partition_size = Mbr::round_up(kernel_size + current_partition_size);
+
+        try_resize_to_fit_into(
+            boot_partition_number,
+            partition_size,
+            image_file,
+            mbr_adapter,
+        )
+        .context("failed to resize boot partition")?;
+        for line in mbr_adapter.pretty_print()?.lines() {
+            debug!("{}", line);
+        }
+
+        let (start, end) = mbr_adapter
+            .partition_limits(boot_partition_number)
+            .context("failed to get partition info")?;
+        let fat32_adapter = Fat32::read_from(image_file.path(), start, end)
+            .context("failed to read boot filesystem")?;
+
+        let fs = fat32_adapter
+            .fs()
+            .context("failed to read boot filesystem")?;
+        let stats = fs.stats().context("failed to get FAT32 stats")?;
+        trace!("FAT32 cluster size: {}", stats.cluster_size());
+        trace!("FAT32 free clusters: {}", stats.free_clusters());
+
+        if (stats.free_clusters() as u64 * stats.cluster_size() as u64) < kernel.size() {
+            trace!("attempt to resize FAT32 filesystem");
+            Fat32::resize()?;
+        }
 
         // Just hardcoded for now
-        let installed_kernel_relative = PathBuf::from("bzImage");
+        let installed_kernel_relative = "bzImage";
 
-        let kernel_path = mountpoint.join(&installed_kernel_relative);
+        let mut source = fs::File::open(kernel.path()).context("failed to open kernel file")?;
+        let mut file = fs
+            .root_dir()
+            .create_file(installed_kernel_relative)
+            .context("failed to create kernel file")?;
+
         trace!(
-            "copying {} into {}",
+            "copying {} into {}:/{}",
             kernel.path().display(),
-            kernel_path.display()
+            image_file.path().display(),
+            installed_kernel_relative
         );
-        fs::copy(kernel.path(), &kernel_path).context("kernel installation failed")?;
+        io::copy(&mut source, &mut file).context("kernel installation failed")?;
 
         let installed_kernel = Path::new(path::MAIN_SEPARATOR_STR).join(installed_kernel_relative);
-        debug!(
+        info!(
             "kernel installed to {}:{}",
-            ctx.opts().image_file_opts.path.display(),
+            image_file.path().display(),
             installed_kernel.display()
         );
         ctx.0.set("installed-kernel", Box::new(installed_kernel));
