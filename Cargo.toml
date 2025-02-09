@@ -37,7 +37,7 @@ tempdir = "0.3.7"
 thiserror = "1"
 
 # Linux VM builder v2 dependencies
-backhand = { version = "0.20", optional = true }
+backhand = { version = "0.20", optional = true, default-features = false, features = ["xz"] }
 bytesize = { version = "1", optional = true }
 directories = { version = "5", optional = true }
 fatfs = { version = "0.3", optional = true }
