@@ -29,7 +29,7 @@ pub enum DirectoryError {
 
 /// Directory adapter.
 ///
-/// Provides some helpfull methods to operate on directories.
+/// Provides some helpful methods to operate on directories.
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Directory<'a> {
     path: &'a Path,
