@@ -1,18 +1,16 @@
 //! Linux VM builder.
 
 use anyhow::{Context as _, Result};
-use bytesize::ByteSize;
 use directories::ProjectDirs;
 use std::any::Any;
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use tempdir::TempDir;
 
 use crate::builders::{Context, Pipeline, Steps};
 
 mod container;
-mod extlinux;
+mod directory;
 mod filesystem;
 mod gevulot_runtime;
 mod image_file;
@@ -21,8 +19,8 @@ mod mbr;
 mod mia;
 mod mount;
 mod nvidia;
-mod resize;
 mod rootfs;
+mod syslinux;
 mod utils;
 
 /// Image file options.
@@ -32,7 +30,9 @@ pub struct ImageFileOpts {
     pub path: PathBuf,
 
     /// Image size.
-    pub size: u64,
+    ///
+    /// If the size is `Some(_)`, image file must be of this size and cannot be resized.
+    pub size: Option<u64>,
 
     /// Overwrite existing image file.
     pub force: bool,
@@ -74,8 +74,24 @@ pub enum KernelOpts {
     },
 }
 
+/// Filesystem to use for root filesystem in the VM.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum RootFsOpts {
+    /// SquashFS
+    ///
+    /// This filesystem will be written directly without mounting,
+    /// so there is no mount options.
+    SquashFs,
+
+    /// EXT4
+    Ext4 {
+        /// Mounting options.
+        mount_type: MountType,
+    },
+}
+
 /// Mounting options for target VM image.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MountType {
     /// Use native OS mount.
     ///
@@ -156,8 +172,8 @@ pub struct BuildOpts {
     /// Linux kernel options.
     pub kernel_opts: KernelOpts,
 
-    /// Type of the mount for target VM image.
-    pub mount_type: MountType,
+    /// Root filesystem options.
+    pub root_fs_opts: RootFsOpts,
 
     /// Install NVidia drivers.
     pub nvidia_drivers: bool,
@@ -184,12 +200,6 @@ pub struct BuildOpts {
     pub gen_base_img: bool,
 }
 
-// This size is chosen 9MiB to avoid `Filesystem too small for a journal` when creating EXT4 fs.
-// Since kernel size is approximately 12-14 MB, it will almost never be shrinked.
-/// Minimal initial image size.
-/// Used when image size is not specified implicitly.
-pub const MIN_IMAGE_SIZE: ByteSize = ByteSize::mib(9);
-
 /// Linux VM build context.
 ///
 /// To create context, use [`LinuxVMBuildContext::from_opts()`].
@@ -207,12 +217,11 @@ impl LinuxVMBuildContext {
     pub fn from_opts(opts: BuildOpts) -> Result<Self> {
         let mut ctx = Context::new();
         ctx.set("opts", Box::new(opts));
-        ctx.set(
-            "tmp",
-            Box::new(
-                TempDir::new("linux-vm-build").context("failed to create temporary directory")?,
-            ),
-        );
+
+        let tmp = TempDir::new("linux-vm-build").context("failed to create temporary directory")?;
+        log::debug!("temp directory: {} (removed on exit)", tmp.path().display());
+        ctx.set("tmp", Box::new(tmp));
+
         let project_dirs = ProjectDirs::from("", "gevulot", "gvltctl");
         // Normally it will be `$HOME/.cache/gvltctl` on Linux
         //  or `$HOME/Library/Caches/gevulot.gvltctl` on MacOS
@@ -225,6 +234,7 @@ impl LinuxVMBuildContext {
                 cache_path.display()
             ))?;
         }
+        log::debug!("cache directory: {}", cache_path.display());
         ctx.set("cache", Box::new(cache_path));
         Ok(Self(ctx))
     }
@@ -282,36 +292,16 @@ impl LinuxVMBuildContext {
     }
 }
 
-/// This error should be treated as internal builder error.
-#[derive(thiserror::Error, Debug)]
-pub enum LinuxVMBuilderError {
-    /// Cannot perform action because required element in the context wasn't found.
-    #[error("internal builder error: cannot {action:?}: {context_elem:?} not found")]
-    InvalidContext {
-        action: String,
-        context_elem: String,
-    },
-}
-
-impl LinuxVMBuilderError {
-    pub fn invalid_context(action: &str, context_elem: &str) -> Self {
-        Self::InvalidContext {
-            action: action.to_string(),
-            context_elem: context_elem.to_string(),
-        }
-    }
-}
-
 /// This image contains:
 ///  - msdos partition table
 ///  - mbr bootcode
 ///  - bootloader (syslinux)
 ///  - partition p1
-///  - ext4 filesystem
+///  - fat32 filesystem on p1
 ///
 /// This image was created using `--generate-base-image` option.
 ///
-/// Unfortunatelly this solution increases gvltctl executable size by ~9MB.
+/// Unfortunatelly this solution increases gvltctl executable size by ~20MB.
 pub const BASE_IMAGE: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/src/builders_v2/linux_vm/data/base.img"
@@ -320,37 +310,12 @@ pub const BASE_IMAGE: &[u8] = include_bytes!(concat!(
 /// Setup pipeline steps depending on the context.
 fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext> {
     if ctx.opts().gen_base_img {
-        return setup_base_image_pipeline(ctx);
+        return Pipeline::from_steps(ctx, setup_base_image_steps());
     }
 
     let mut steps: Steps<_> = Vec::new();
 
-    // Define source filesystem
-    match &ctx.opts().fs_source {
-        FilesystemSource::Dir(path) => {
-            steps.push(Box::new(rootfs::RootFSFromDir::new(path.clone())));
-        }
-        FilesystemSource::Image { reference, backend } => {
-            steps.push(Box::new(rootfs::RootFSEmpty));
-
-            let image = container::ContainerImage::new(*backend, reference.clone(), false);
-            ctx.0.set("container-image", Box::new(image));
-            steps.push(Box::new(container::GetContainerRuntime));
-            steps.push(Box::new(container::CopyFilesystem));
-        }
-        FilesystemSource::Containerfile { file, backend } => {
-            steps.push(Box::new(rootfs::RootFSEmpty));
-
-            steps.push(Box::new(container::BuildContainerImage::new(
-                *backend,
-                file.clone(),
-            )));
-            steps.push(Box::new(container::GetContainerRuntime));
-            steps.push(Box::new(container::CopyFilesystem));
-        }
-    }
-
-    // Prepare Linux kernel
+    // TODO: build artifacts should go to cache
     match &ctx.opts().kernel_opts {
         KernelOpts::Precompiled { file } => {
             steps.push(Box::new(kernel::Precompiled::new(file.clone())));
@@ -366,49 +331,56 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
         }
     }
 
+    // Define source filesystem
+    steps.push(Box::new(rootfs::Init));
+
+    match &ctx.opts().fs_source {
+        FilesystemSource::Dir(path) => {
+            steps.push(Box::new(rootfs::CopyExisting::new(path.clone())));
+        }
+        FilesystemSource::Image { reference, backend } => {
+            // Directly set container image here (no additional steps needed)
+            let image = container::ContainerImage::new(*backend, reference.clone(), false);
+            ctx.set("container-image", Box::new(image));
+
+            steps.push(Box::new(container::GetContainerRuntime));
+            steps.push(Box::new(container::ExportFilesystem));
+        }
+        FilesystemSource::Containerfile { file, backend } => {
+            steps.push(Box::new(container::BuildContainerImage::new(
+                *backend,
+                file.clone(),
+            )));
+            steps.push(Box::new(container::GetContainerRuntime));
+            steps.push(Box::new(container::ExportFilesystem));
+        }
+    }
+
     // Prepare NVidia drivers
+    // TODO: build artifacts should go to cache
     if ctx.opts().nvidia_drivers {
         steps.push(Box::new(nvidia::BuildDrivers));
     }
 
-    // Get VM image with partitions and filesystem
+    // Get VM image with partitions and boot filesystem
     if ctx.opts().from_scratch {
-        steps.push(Box::new(image_file::CreateImageFile));
-        steps.push(Box::new(mbr::CreateMBR));
-        steps.push(Box::new(filesystem::Create));
+        steps.append(&mut setup_base_image_steps());
     } else {
         steps.push(Box::new(image_file::UseImageFile));
         steps.push(Box::new(mbr::ReadMBR));
-        steps.push(Box::new(filesystem::UseExisting));
+        steps.push(Box::new(mbr::ReadBootPartition));
+        steps.push(Box::new(filesystem::ReadBootFs));
     }
 
-    // Extend VM image before filling it with the content.
-    // IMPORTANT: all the artifacts must be generated before this step to correctly get their sizes.
-    steps.push(Box::new(resize::ResizeAll::<filesystem::Ext4>::new()));
-
-    match ctx.opts().mount_type {
-        MountType::Fuse => {
-            steps.push(Box::new(mount::fuse::MountFileSystem));
-        }
-        MountType::Native => {
-            steps.push(Box::new(mount::native::MountFileSystem));
-        }
-    }
-
-    // EXTLINUX is installed on mounted filesystem.
-    // It doesn't work with FUSE mounts, that's why --from-scratch implies --no-fuse.
-    if ctx.opts().from_scratch {
-        steps.push(Box::new(extlinux::InstallExtlinux));
-    }
-
+    // Install kernel into boot filesystem.
     steps.push(Box::new(kernel::Install));
-    steps.push(Box::new(rootfs::InstallRootFS));
-    steps.push(Box::new(extlinux::InstallExtlinuxCfg));
 
+    // Install NVIDIA drivers into root filesystem.
     if ctx.opts().nvidia_drivers {
         steps.push(Box::new(nvidia::InstallDrivers));
     }
 
+    // Install MIA into root filesystem.
     if let InitSystemOpts::Mia {
         mia_version,
         mounts,
@@ -429,18 +401,68 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
         )));
     }
 
+    match &ctx.opts().root_fs_opts {
+        RootFsOpts::SquashFs => {
+            steps.push(Box::new(filesystem::squashfs::Init));
+            steps.push(Box::new(rootfs::InstallToSquashFs));
+            steps.push(Box::new(filesystem::squashfs::EvaluateSize));
+        }
+        RootFsOpts::Ext4 { .. } => {
+            steps.push(Box::new(filesystem::ext4::EvaluateSize));
+        }
+    }
+
+    steps.push(Box::new(mbr::CreateRootPartition));
+
+    match ctx.opts().root_fs_opts {
+        RootFsOpts::SquashFs => {
+            steps.push(Box::new(filesystem::squashfs::WriteSquashFs));
+        }
+        RootFsOpts::Ext4 { mount_type } => {
+            steps.push(Box::new(filesystem::ext4::Format));
+            match mount_type {
+                MountType::Fuse => {
+                    steps.push(Box::new(mount::fuse::MountFileSystem(
+                        "root-partition-number",
+                    )));
+                }
+                MountType::Native => {
+                    steps.push(Box::new(mount::native::MountFileSystem(
+                        "root-partition-number",
+                    )));
+                }
+            }
+            steps.push(Box::new(rootfs::InstallToMount));
+        }
+    }
+
+    // Install SYSLINUX configuration
+    steps.push(Box::new(syslinux::InstallCfg));
+
     Pipeline::from_steps(ctx, steps)
 }
 
-fn setup_base_image_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext> {
-    let steps: Steps<_> = vec![
-        Box::new(image_file::CreateImageFile),
-        Box::new(mbr::CreateMBR),
-        Box::new(filesystem::Create),
-        Box::new(mount::native::MountFileSystem),
-        Box::new(extlinux::InstallExtlinux),
-    ];
-    Pipeline::from_steps(ctx, steps)
+/// Set up pipeline for building base image.
+fn setup_base_image_steps() -> Steps<LinuxVMBuildContext> {
+    let mut steps: Steps<_> = Vec::new();
+
+    steps.push(Box::new(image_file::CreateImageFile));
+    steps.push(Box::new(mbr::CreateMBR));
+    // FIXME: there is an issue with resizing existing FAT32 filesystem and not
+    // loosing files and VBR written by SYSLINUX.
+    // Because of that it is impossible right now to format a smaller filesystem
+    // only for bootloader and then resize it before writing the kernel.
+    // To solve this we over-allocate 20 MiB (40960 sectors) for now, which should be enough
+    // for most of the kernels.
+    // If you are facing a panic on kernel installation step ("FAT32 resizing"),
+    // increase this amount here.
+    // Ideally we would like to only allocate the space for bootloader and
+    // filesystem metadata here.
+    steps.push(Box::new(mbr::CreateBootPartition::new(40960)));
+    steps.push(Box::new(filesystem::CreateBootFs));
+    steps.push(Box::new(syslinux::Install));
+
+    steps
 }
 
 pub fn build(ctx: &mut LinuxVMBuildContext) -> Result<serde_json::Value> {

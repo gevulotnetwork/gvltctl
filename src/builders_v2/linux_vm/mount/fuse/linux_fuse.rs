@@ -5,9 +5,10 @@ use std::fmt;
 use std::path::Path;
 use tempdir::TempDir;
 
-use crate::builders::linux_vm::filesystem::{Ext4, FileSystemHandler};
+use crate::builders::linux_vm::image_file::ImageFile;
+use crate::builders::linux_vm::mbr::Mbr;
 use crate::builders::linux_vm::utils::run_command;
-use crate::builders::linux_vm::{LinuxVMBuildContext, LinuxVMBuilderError as Error};
+use crate::builders::linux_vm::LinuxVMBuildContext;
 use crate::builders::Step;
 
 use super::MountHandler;
@@ -25,12 +26,10 @@ impl MountHandler for FuseMount {
         self.mountpoint.path()
     }
 
-    fn new<F, P>(fs: &F, source: P) -> Result<Self>
+    fn new<P>(source: P, offset: u64) -> Result<Self>
     where
-        F: FileSystemHandler,
         P: AsRef<Path>,
     {
-        let offset = fs.offset();
         let mountpoint =
             TempDir::new("linux-vm-mount").context("create temp directory for mounting")?;
         run_command([
@@ -70,24 +69,28 @@ impl Drop for FuseMount {
 
 /// Create new filesystem FUSE-based mount.
 ///
+/// `self.0` defines the name of context variable (of type `usize`),
+/// storing the partition number to mount, e.g. `root-partition-number`.
+///
 /// # Context variables required
-/// - `fs`
+/// - `image-file`
+/// - variable defined in `self.0` option
 ///
 /// # Context variables set
 /// - `mountpoint`
 /// - `mount` (holds the actual mount until dropped)
-pub struct MountFileSystem;
+pub struct MountFileSystem(pub &'static str);
 
 impl Step<LinuxVMBuildContext> for MountFileSystem {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         info!("mounting filesystem (FUSE)");
+        let image_file = ctx.get::<ImageFile>("image-file").expect("image-file");
+        let partition_idx = *ctx.get::<usize>(&self.0).expect(&self.0);
 
-        let fs = ctx.get::<Ext4>("fs").ok_or(Error::invalid_context(
-            "mount filesystem",
-            "filesystem handler",
-        ))?;
+        let mbr_adapter = Mbr::read_from(image_file.path())?;
+        let (offset, _) = mbr_adapter.partition_limits(partition_idx)?;
 
-        let mount = FuseMount::new(fs, fs.path()).context("mount filesystem")?;
+        let mount = FuseMount::new(image_file.path(), offset).context("mount filesystem")?;
         debug!("mounted filesystem at {}", &mount);
 
         // TODO: probably there is a nice way to retrieve this path from trait object of Mount.

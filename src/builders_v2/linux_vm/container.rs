@@ -5,11 +5,10 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::builders::linux_vm::rootfs::RootFS;
 use crate::builders::linux_vm::utils::run_command;
 use crate::builders::Step;
 
-use super::{ContainerBackend, LinuxVMBuildContext, LinuxVMBuilderError};
+use super::{ContainerBackend, LinuxVMBuildContext};
 
 /// Container image reference.
 #[derive(Clone, Debug)]
@@ -155,33 +154,25 @@ impl Drop for Container {
 ///
 /// # Context variables required
 /// - `container-image`
-/// - `rootfs`
+/// - `root-fs`
 #[derive(Clone, Debug)]
-pub struct CopyFilesystem;
+pub struct ExportFilesystem;
 
-impl Step<LinuxVMBuildContext> for CopyFilesystem {
+impl Step<LinuxVMBuildContext> for ExportFilesystem {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
-        info!("creating filesystem from container image");
-        let image = ctx.get::<ContainerImage>("container-image").ok_or(
-            LinuxVMBuilderError::invalid_context("build root filesystem", "image reference"),
-        )?;
+        let image = ctx
+            .get::<ContainerImage>("container-image")
+            .expect("container-image");
+        let rootfs = ctx.get::<PathBuf>("root-fs").expect("root-fs");
 
+        info!("creating container from image");
         let container = Container::create(image).context("failed to create container")?;
         debug!("created container: {}", &container.id);
 
-        let rootfs = ctx
-            .get::<RootFS>("rootfs")
-            .ok_or(LinuxVMBuilderError::invalid_context(
-                "build root filesystem",
-                "root filesystem handler",
-            ))?;
-
-        debug!(
-            "exporting container filesystem to {}",
-            rootfs.path().display()
-        );
+        info!("exporting filesystem from container");
+        debug!("{} -> {}", &container.id, rootfs.display());
         container
-            .export(rootfs.path())
+            .export(&rootfs)
             .context("failed to export container filesystem")?;
 
         Ok(())
@@ -208,7 +199,10 @@ impl BuildContainerImage {
 
 impl Step<LinuxVMBuildContext> for BuildContainerImage {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
-        info!("building container image");
+        info!(
+            "building container image from: {}",
+            self.containerfile.display()
+        );
         let image = ContainerImage::build(self.backend, &self.containerfile)
             .context("failed to build container image")?;
         debug!("image built: {}", &image.id);
@@ -217,19 +211,19 @@ impl Step<LinuxVMBuildContext> for BuildContainerImage {
     }
 }
 
-/// Extract runtime config from the container and turn it into [`gevulot_rs::runtime_config`].
+/// Extract runtime config from the container and turn it into [`RuntimeConfig`].
 ///
 /// # Context variables required
 /// - `container-image`
 ///
 /// # Context variables defined
-/// - `container-rt-config`
+/// - `container-rt-config`: [`RuntimeConfig`]
 pub struct GetContainerRuntime;
 
 impl Step<LinuxVMBuildContext> for GetContainerRuntime {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         if let Some(image) = ctx.get::<ContainerImage>("container-image") {
-            info!("exctracting runtime configugation");
+            info!("extracting runtime configugation from image");
             let config = image.get_config().context("failed to get runtime config")?;
             let mut rt_config = RuntimeConfig::default();
             // Add enviromnental variables

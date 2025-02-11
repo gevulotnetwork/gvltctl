@@ -5,12 +5,12 @@ use std::path::PathBuf;
 
 use crate::builders::Step;
 
-use super::{LinuxVMBuildContext, LinuxVMBuilderError};
+use super::LinuxVMBuildContext;
 
-/// Install MIA.
+/// Install MIA into root filesystem.
 ///
 /// # Context variables required
-/// - `mountpoint`
+/// - `root-fs`
 pub struct InstallMia {
     version: String,
     gevulot_runtime: bool,
@@ -112,19 +112,16 @@ impl Step<LinuxVMBuildContext> for InstallMia {
         install_config.mia_version = self.version.to_string();
         install_config.mia_platform = "x86_64-unknown-linux-gnu".to_string();
 
-        let mountpoint =
-            ctx.get::<PathBuf>("mountpoint")
-                .ok_or(LinuxVMBuilderError::invalid_context(
-                    "install MIA",
-                    "mountpoint",
-                ))?;
-        install_config.prefix = mountpoint.clone();
+        let rootfs = ctx.get::<PathBuf>("root-fs").expect("root-fs");
+
+        install_config.prefix = rootfs.clone();
 
         // In case there is an init system installed in the container
         install_config.overwrite_symlink = true;
 
         install_config.rt_config = Some(rt_config);
 
+        // TODO: add 'fetch' option to utilize cache and avoid re-downloading
         mia_installer::install(&install_config).context("failed to install MIA")?;
 
         Ok(())

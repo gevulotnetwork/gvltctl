@@ -1,35 +1,56 @@
 use anyhow::{Context, Result};
-use log::info;
+use log::{debug, info, trace};
 use std::ffi::OsStr;
 use std::fs;
 use std::io::{self, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
+use crate::builders::linux_vm::directory::Directory;
+use crate::builders::linux_vm::image_file::ImageFile;
 use crate::builders::linux_vm::mbr::Mbr;
 use crate::builders::linux_vm::utils::run_command;
-use crate::builders::linux_vm::{LinuxVMBuildContext, LinuxVMBuilderError};
+use crate::builders::linux_vm::LinuxVMBuildContext;
 use crate::builders::Step;
 
-use super::FileSystemHandler;
-
-/// EXT4 filesystem handler on Linux.
-pub struct Ext4 {
+/// EXT4 filesystem adapter on Linux.
+pub struct Ext4<'a> {
     /// Path to image file.
-    path: PathBuf,
+    path: &'a Path,
 
     /// Partition start offset in bytes.
     offset: u64,
 }
 
-impl Ext4 {
-    pub fn new(path: PathBuf, offset: u64) -> Self {
-        Self { path, offset }
+impl<'a> Ext4<'a> {
+    const BLOCK_SIZE: u64 = 0x1000;
+    const INODE_SIZE: u64 = 0x100;
+    const INODE_RATIO: u64 = 0x4000;
+
+    /// Round up a value to the size of EXT4 block.
+    pub fn round_up(value: u64) -> u64 {
+        (value / Self::BLOCK_SIZE * Self::BLOCK_SIZE)
+            + (value % Self::BLOCK_SIZE != 0) as u64 * Self::BLOCK_SIZE
     }
 
-    /// Create new filesystem.
-    pub fn create(path: PathBuf, offset: u64, partition_size: u64) -> Result<Self> {
+    pub fn new(path: &'a Path, start: u64, _end: u64) -> Self {
+        Self {
+            path,
+            offset: start,
+        }
+    }
+
+    pub fn offset(&self) -> u64 {
+        self.offset
+    }
+
+    pub fn path(&self) -> &'a Path {
+        self.path
+    }
+
+    /// Format new EXT4 filesystem.
+    pub fn format(path: &'a Path, offset: u64, partition_size: u64) -> Result<()> {
         // Size of the filesystem in blocks (rounded to floor)
-        let size = partition_size / Self::BLOCK_SIZE;
+        let size = partition_size / Ext4::BLOCK_SIZE;
 
         run_command([
             OsStr::new("mkfs.ext4"),
@@ -37,10 +58,19 @@ impl Ext4 {
             OsStr::new("-q"),
             // block size
             OsStr::new("-b"),
-            OsStr::new(Self::BLOCK_SIZE.to_string().as_str()),
+            OsStr::new(Ext4::BLOCK_SIZE.to_string().as_str()),
+            // inode size
+            OsStr::new("-I"),
+            OsStr::new(Ext4::INODE_SIZE.to_string().as_str()),
+            // inode ratio
+            OsStr::new("-i"),
+            OsStr::new(Ext4::INODE_RATIO.to_string().as_str()),
             // don't reserve blocks for super-user
             OsStr::new("-m"),
             OsStr::new("0"),
+            // deactivate journal and resize_inode
+            OsStr::new("-O"),
+            OsStr::new("^has_journal,^resize_inode"),
             // offset of the filesystem partition on the disk
             OsStr::new("-E"),
             OsStr::new(&format!("offset={}", offset)),
@@ -50,25 +80,13 @@ impl Ext4 {
             OsStr::new(size.to_string().as_str()),
         ])?;
 
-        Ok(Self { path, offset })
-    }
-}
-
-impl FileSystemHandler for Ext4 {
-    const BLOCK_SIZE: u64 = 0x1000;
-
-    fn offset(&self) -> u64 {
-        self.offset
-    }
-
-    fn path(&self) -> &Path {
-        self.path.as_path()
+        Ok(())
     }
 
     /// Run filesystem check.
     ///
     /// Wrapper for `e2fsck -f -n IMAGE?offset=OFFSET`
-    fn check(&self) -> Result<()> {
+    pub fn check(&self) -> Result<()> {
         let mut target = self.path.as_os_str().to_os_string();
         target.push(OsStr::new(&format!("?offset={}", self.offset)));
         run_command([
@@ -86,7 +104,7 @@ impl FileSystemHandler for Ext4 {
     /// `new_size` - new size of the filesystem in blocks.
     ///
     /// Wrapper for `resize2fs`.
-    fn resize(&self, new_size: u64) -> Result<()> {
+    pub fn resize(&self, new_size: u64) -> Result<()> {
         // HACK: becase resize2fs IMAGE?offset=OFFSET produces broken filesystem,
         // we copy the filesystem into temp file, temporarily stripping pre-fs sectors,
         // then we resize it there and copy back.
@@ -139,76 +157,65 @@ impl FileSystemHandler for Ext4 {
     }
 }
 
-/// Create new EXT4 filesystem on partition.
+/// Evaluate the size of the partition to store this filesystem.
 ///
-/// # Context variables required
-/// - `mbr`
+/// # Context variables required:
+/// - `root-fs`
 ///
-/// # Context variables defined
-/// - `fs`
-pub struct Create;
+/// # Context variables defined:
+/// - `root-partition-size`: [`u64`]
+pub struct EvaluateSize;
 
-impl Step<LinuxVMBuildContext> for Create {
+impl Step<LinuxVMBuildContext> for EvaluateSize {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
-        info!("creating EXT4 filesystem on the partition");
+        debug!("evaluating size of partition for EXT4");
+        let rootfs = ctx.get::<PathBuf>("root-fs").expect("root-fs");
+        let dir = Directory::from_path(rootfs)?;
 
-        let mbr = ctx
-            .get::<Mbr>("mbr")
-            .ok_or(LinuxVMBuilderError::invalid_context(
-                "create EXT4 filesystem",
-                "MBR handler",
-            ))?;
+        let size_bytes = Ext4::round_up(dir.size()?);
+        trace!(
+            "total data bytes: {} ({} blocks)",
+            bytesize::ByteSize::b(size_bytes).to_string_as(true),
+            size_bytes / Ext4::BLOCK_SIZE
+        );
 
-        let path = mbr.path().to_path_buf();
+        // FIXME: looks like this estimation doesn't work
+        let partition_size =
+            (size_bytes * Ext4::INODE_RATIO) / (Ext4::INODE_RATIO - Ext4::INODE_SIZE);
+        // This is a very dirty ugly solution and needs to be fixed
+        let partition_size = partition_size * 2;
 
-        // Calculate fs partition offset and size from MBR data
-        let mbr = mbr.mbr();
-        let partition = &mbr.header.partition_1;
-        let sector_size: u64 = mbr.sector_size.into();
-        let offset: u64 = u64::from(partition.starting_lba) * sector_size; // bytes
-        let partition_size: u64 = u64::from(partition.sectors) * sector_size; // bytes
+        debug!(
+            "size of partition for EXT4: {}",
+            bytesize::ByteSize::b(partition_size).to_string_as(true),
+        );
 
-        let fs =
-            Ext4::create(path, offset, partition_size).context("failed to create filesystem")?;
-
-        ctx.set("fs", Box::new(fs));
+        ctx.set("root-partition-size", Box::new(partition_size));
 
         Ok(())
     }
 }
 
-/// Read existing filesystem from partition.
+/// Create new EXT4 filesystem on root partition.
 ///
 /// # Context variables required
-/// - `mbr`
-///
-/// # Context variables defined
-/// - `fs`
-pub struct UseExisting;
+/// - `image-file`
+/// - `root-partition-number`
+pub struct Format;
 
-impl Step<LinuxVMBuildContext> for UseExisting {
+impl Step<LinuxVMBuildContext> for Format {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
-        info!("using existing EXT4 filesystem on the partition");
+        info!("creating EXT4 filesystem on the partition");
+        let image_file = ctx.get::<ImageFile>("image-file").expect("image-file");
+        let root_partition_number = *ctx
+            .get::<usize>("root-partition-number")
+            .expect("root-partition-number");
 
-        let mbr = ctx
-            .get::<Mbr>("mbr")
-            .ok_or(LinuxVMBuilderError::invalid_context(
-                "read EXT4 filesystem",
-                "MBR handler",
-            ))?;
+        let mbr_adapter = Mbr::read_from(image_file.path())?;
+        let (start, end) = mbr_adapter.partition_limits(root_partition_number)?;
 
-        let path = mbr.path().to_path_buf();
-
-        // Calculate fs partition offset from MBR data
-        let mbr = mbr.mbr();
-        let partition = &mbr.header.partition_1;
-        let sector_size: u64 = mbr.sector_size.into();
-        let offset: u64 = u64::from(partition.starting_lba) * sector_size; // bytes
-
-        let fs = Ext4::new(path, offset);
-        fs.check()?;
-
-        ctx.set("fs", Box::new(fs));
+        Ext4::format(image_file.path(), start, end - start)
+            .context("failed to create filesystem")?;
 
         Ok(())
     }

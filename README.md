@@ -65,13 +65,17 @@ To build Linux kernel from sources (not needed if using pre-compiled kernel with
 
 - `git build-essential libncurses-dev gawk flex bison openssl libssl-dev dkms libelf-dev libudev-dev libpci-dev libiberty-dev autoconf llvm bc`
 
-To operate on VM filesystem:
+To use EXT4 as root filesystem inside VM (see `--root-fs-type` option):
 
 - `e2fsprogs`
 
 To mount VM filesystem using FUSE (see `--fuse` option):
 
 - `fuse2fs`
+
+To build VM image from scratch without using base image (see `--from-scratch` option):
+
+- `syslinux`
 
 ## Usage
 

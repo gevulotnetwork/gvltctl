@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::builders::Step;
 
-use super::{LinuxVMBuildContext, LinuxVMBuilderError as Error};
+use super::LinuxVMBuildContext;
 
 /// Path to gevulot mount directories (relative to root `/`).
 const DIRS: &[&str] = &[
@@ -26,19 +26,14 @@ fn create_dirs(base_path: &Path) -> Result<()> {
 /// Create gevulot runtime directories: `/mnt/gevulot/{input,output,rt-config}`.
 ///
 /// # Context variables required
-/// - `mountpoint`
+/// - `root-fs`
 pub struct CreateGevulotRuntimeDirs;
 
 impl Step<LinuxVMBuildContext> for CreateGevulotRuntimeDirs {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         info!("creating gevulot runtime directories");
-        let mountpoint = ctx
-            .get::<PathBuf>("mountpoint")
-            .ok_or(Error::invalid_context(
-                "create gevulot runtime directories",
-                "mountpoint",
-            ))?;
-        create_dirs(&mountpoint).context("failed to create gevulot runtime directories")?;
+        let rootfs = ctx.get::<PathBuf>("root-fs").expect("root-fs");
+        create_dirs(&rootfs).context("failed to create gevulot runtime directories")?;
         Ok(())
     }
 }

@@ -15,7 +15,7 @@ pub struct BuildArgs {
     pub image: Image,
 
     /// Container backend to use.
-    #[arg(long, default_value_t = ContainerBackend::Podman)]
+    #[arg(long, default_value_t)]
     pub container_backend: ContainerBackend,
 
     /// Size of the disk image (e.g., 10G, 1024M).
@@ -160,6 +160,10 @@ pub struct BuildArgs {
     )]
     pub output_file: PathBuf,
 
+    /// Root filesystem type.
+    #[arg(long, default_value_t)]
+    pub root_fs_type: RootFsType,
+
     /// Use FUSE to mount target image.
     ///
     /// Use native OS mounts instead. Requires root privileges.
@@ -257,6 +261,32 @@ impl fmt::Display for ContainerBackend {
     }
 }
 
+/// Root filesystem type.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+#[value(rename_all = "lower")]
+pub enum RootFsType {
+    SquashFs,
+    Ext4,
+}
+
+impl Default for RootFsType {
+    fn default() -> Self {
+        Self::SquashFs
+    }
+}
+
+impl fmt::Display for RootFsType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.to_possible_value()
+                .expect("no skipped values")
+                .get_name()
+        )
+    }
+}
+
 impl BuildArgs {
     /// Run build subcommand.
     pub async fn run(&self, format: OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
@@ -286,17 +316,23 @@ impl TryFrom<&BuildArgs> for linux_vm::LinuxVMBuildContext {
 
     fn try_from(opts: &BuildArgs) -> Result<Self, Self::Error> {
         use anyhow::{anyhow, bail};
-        use linux_vm::{FilesystemSource, ImageFileOpts, InitSystemOpts, KernelOpts, MountType};
+        use bytesize::ByteSize;
+        use linux_vm::{
+            FilesystemSource, ImageFileOpts, InitSystemOpts, KernelOpts, MountType, RootFsOpts,
+        };
 
         let image_file_opts = ImageFileOpts {
             path: PathBuf::from(&opts.output_file),
-            size: if let Some(size) = &opts.image_size {
-                size.parse::<bytesize::ByteSize>()
-                    .map_err(|_| anyhow!("invalid image size"))?
-                    .as_u64()
-            } else {
-                linux_vm::MIN_IMAGE_SIZE.as_u64()
-            },
+            size: opts
+                .image_size
+                .as_ref()
+                .map(|size| {
+                    size.parse::<ByteSize>()
+                        .as_ref()
+                        .map(ByteSize::as_u64)
+                        .map_err(|_| anyhow!("invalid image size"))
+                })
+                .transpose()?,
             force: opts.force,
         };
 
@@ -312,12 +348,6 @@ impl TryFrom<&BuildArgs> for linux_vm::LinuxVMBuildContext {
         };
 
         let nvidia_drivers = opts.nvidia_drivers;
-
-        let mount_type = if opts.fuse && !opts.from_scratch {
-            MountType::Fuse
-        } else {
-            MountType::Native
-        };
 
         let init_system_opts = if let Some(init) = &opts.init {
             InitSystemOpts::Custom {
@@ -356,19 +386,31 @@ impl TryFrom<&BuildArgs> for linux_vm::LinuxVMBuildContext {
             bail!("no source was specified");
         };
 
+        let root_fs_opts = match &opts.root_fs_type {
+            RootFsType::SquashFs => RootFsOpts::SquashFs,
+            RootFsType::Ext4 => {
+                let mount_type = if opts.fuse && !opts.from_scratch {
+                    MountType::Fuse
+                } else {
+                    MountType::Native
+                };
+                RootFsOpts::Ext4 { mount_type }
+            }
+        };
+
         let gen_base_img = opts.generate_base_image;
-        let from_scratch = opts.from_scratch;
+        let from_scratch = gen_base_img || opts.from_scratch;
         let mbr_file = opts.mbr_file.clone();
         let rw_root = opts.rw_root;
 
         let opts = linux_vm::BuildOpts {
             image_file_opts,
             kernel_opts,
-            mount_type,
             nvidia_drivers,
             init_system_opts,
             fs_source,
             from_scratch,
+            root_fs_opts,
             mbr_file,
             rw_root,
             gen_base_img,
