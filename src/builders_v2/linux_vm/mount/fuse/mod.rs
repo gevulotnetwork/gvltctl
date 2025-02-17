@@ -2,6 +2,7 @@
 //!
 //! Implementation differs on Linux-based and MacOS.
 
+#[cfg_attr(target_os = "macos", allow(unused_imports))]
 pub use super::MountHandler;
 
 #[cfg(target_os = "linux")]
