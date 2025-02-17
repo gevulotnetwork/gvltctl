@@ -1301,6 +1301,7 @@ dependencies = [
  "fs_extra",
  "fscommon",
  "gevulot-rs",
+ "libz-sys",
  "log",
  "mbrman",
  "mia-installer",
