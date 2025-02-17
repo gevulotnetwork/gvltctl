@@ -28,6 +28,7 @@ impl<'a, 'b, 'c> SquashFs<'a, 'b, 'c> {
     }
 
     /// Reference to filesystem writer.
+    #[allow(unused)]
     pub fn fs_writer(&self) -> &FilesystemWriter<'a, 'b, 'c> {
         &self.fs_writer
     }

@@ -28,9 +28,11 @@ pub enum Kernel {
     /// Kernel compiled from sources.
     Sources {
         /// URL used to fetch source code.
+        #[allow(unused)]
         git_url: String,
 
         /// Git version to checkout (e.g. `v6.10.11`).
+        #[allow(unused)]
         version: String,
 
         /// Path to sources.
@@ -87,6 +89,7 @@ impl Kernel {
     // TODO: use this function.
     // TODO: maybe use libgit instead of executable?
     /// Clone Linux kernel repository into `path/version` returning path to resulting directory.
+    #[allow(unused)]
     fn clone(git_url: &str, version: &str, path: &Path) -> Result<PathBuf> {
         let target_path = path.join(version);
         let mut command = vec![

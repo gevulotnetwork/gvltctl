@@ -112,6 +112,7 @@ impl ImageFile {
     }
 
     /// Delete image file.
+    #[allow(unused)]
     pub fn delete(self) -> Result<()> {
         fs::remove_file(self.path).map_err(Into::into)
     }
