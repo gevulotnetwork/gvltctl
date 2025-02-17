@@ -18,6 +18,7 @@ pub trait MountHandler: Sized {
     fn unmount_no_drop(&self) -> Result<()>;
 
     /// Remove mount destroying `self`.
+    #[allow(unused)]
     fn unmount(self) -> Result<()> {
         self.unmount_no_drop()
     }

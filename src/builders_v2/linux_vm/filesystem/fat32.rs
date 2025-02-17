@@ -58,6 +58,7 @@ impl<'a> Fat32<'a> {
     }
 
     /// Path to image file.
+    #[allow(unused)]
     pub fn path(&self) -> &'a Path {
         self.path
     }
@@ -68,6 +69,7 @@ impl<'a> Fat32<'a> {
     }
 
     /// Exclusive offset of the filesystem in disk image.
+    #[allow(unused)]
     pub fn end(&self) -> u64 {
         self.end
     }

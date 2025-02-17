@@ -15,9 +15,11 @@ use crate::builders::Step;
 /// EXT4 filesystem adapter on Linux.
 pub struct Ext4<'a> {
     /// Path to image file.
+    #[allow(unused)]
     path: &'a Path,
 
     /// Partition start offset in bytes.
+    #[allow(unused)]
     offset: u64,
 }
 
@@ -32,6 +34,7 @@ impl<'a> Ext4<'a> {
             + (value % Self::BLOCK_SIZE != 0) as u64 * Self::BLOCK_SIZE
     }
 
+    #[allow(unused)]
     pub fn new(path: &'a Path, start: u64, _end: u64) -> Self {
         Self {
             path,
@@ -39,10 +42,12 @@ impl<'a> Ext4<'a> {
         }
     }
 
+    #[allow(unused)]
     pub fn offset(&self) -> u64 {
         self.offset
     }
 
+    #[allow(unused)]
     pub fn path(&self) -> &'a Path {
         self.path
     }
@@ -86,6 +91,7 @@ impl<'a> Ext4<'a> {
     /// Run filesystem check.
     ///
     /// Wrapper for `e2fsck -f -n IMAGE?offset=OFFSET`
+    #[allow(unused)]
     pub fn check(&self) -> Result<()> {
         let mut target = self.path.as_os_str().to_os_string();
         target.push(OsStr::new(&format!("?offset={}", self.offset)));
@@ -104,6 +110,7 @@ impl<'a> Ext4<'a> {
     /// `new_size` - new size of the filesystem in blocks.
     ///
     /// Wrapper for `resize2fs`.
+    #[allow(unused)]
     pub fn resize(&self, new_size: u64) -> Result<()> {
         // HACK: becase resize2fs IMAGE?offset=OFFSET produces broken filesystem,
         // we copy the filesystem into temp file, temporarily stripping pre-fs sectors,
