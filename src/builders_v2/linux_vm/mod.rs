@@ -193,6 +193,9 @@ pub struct BuildOpts {
     /// Mount root filesystem as read-write.
     pub rw_root: bool,
 
+    /// Cache directory.
+    pub cache_dir: Option<PathBuf>,
+
     /// Generate only base (template) of VM image.
     ///
     /// This image will include bootloader, partition table and a single partition with filesystem.
@@ -216,26 +219,32 @@ impl LinuxVMBuildContext {
     /// - `cache` - general cache directory (for Linux builds and etc.)
     pub fn from_opts(opts: BuildOpts) -> Result<Self> {
         let mut ctx = Context::new();
-        ctx.set("opts", Box::new(opts));
 
         let tmp = TempDir::new("linux-vm-build").context("failed to create temporary directory")?;
         log::debug!("temp directory: {} (removed on exit)", tmp.path().display());
         ctx.set("tmp", Box::new(tmp));
 
-        let project_dirs = ProjectDirs::from("", "gevulot", "gvltctl");
-        // Normally it will be `$HOME/.cache/gvltctl` on Linux
-        //  or `$HOME/Library/Caches/gevulot.gvltctl` on MacOS
-        let cache_path = project_dirs
-            .map(|dirs| dirs.cache_dir().to_path_buf())
-            .unwrap_or(PathBuf::from(".cache"));
-        if !cache_path.is_dir() {
-            fs::create_dir_all(&cache_path).context(format!(
-                "failed to create cache directory: {}",
-                cache_path.display()
-            ))?;
-        }
-        log::debug!("cache directory: {}", cache_path.display());
-        ctx.set("cache", Box::new(cache_path));
+        let cache_dir = if let Some(cache_dir) = &opts.cache_dir {
+            cache_dir.clone()
+        } else {
+            let project_dirs = ProjectDirs::from("", "gevulot", "gvltctl");
+            // Normally it will be `$HOME/.cache/gvltctl` on Linux
+            //  or `$HOME/Library/Caches/gevulot.gvltctl` on MacOS
+            let cache_dir = project_dirs
+                .map(|dirs| dirs.cache_dir().to_path_buf())
+                .unwrap_or(PathBuf::from(".cache"));
+            if !cache_dir.is_dir() {
+                fs::create_dir_all(&cache_dir).context(format!(
+                    "failed to create cache directory: {}",
+                    cache_dir.display()
+                ))?;
+            }
+            cache_dir
+        };
+
+        log::debug!("cache directory: {}", cache_dir.display());
+        ctx.set("cache", Box::new(cache_dir));
+        ctx.set("opts", Box::new(opts));
         Ok(Self(ctx))
     }
 
