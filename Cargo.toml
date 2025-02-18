@@ -40,6 +40,7 @@ thiserror = "1"
 backhand = { version = "0.20", optional = true, default-features = false, features = ["xz"] }
 base64 = { version = "0.22", optional = true }
 bytesize = { version = "1", optional = true }
+crc = { version = "3", optional = true }
 directories = { version = "5", optional = true }
 fatfs = { version = "0.3", optional = true }
 fscommon = { version = "0.1", optional = true }
@@ -63,6 +64,7 @@ vm-builder-v2 = [
     "dep:backhand",
     "dep:base64",
     "dep:bytesize",
+    "dep:crc",
     "dep:directories",
     "dep:fatfs",
     "dep:fscommon",
