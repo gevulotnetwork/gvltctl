@@ -365,7 +365,6 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
     }
 
     // Prepare NVidia drivers
-    // TODO: build artifacts should go to cache
     if ctx.opts().nvidia_drivers {
         steps.push(Box::new(nvidia::BuildDrivers));
     }
