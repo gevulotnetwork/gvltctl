@@ -324,7 +324,6 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
 
     let mut steps: Steps<_> = Vec::new();
 
-    // TODO: build artifacts should go to cache
     match &ctx.opts().kernel_opts {
         KernelOpts::Precompiled { file } => {
             steps.push(Box::new(kernel::Precompiled::new(file.clone())));

@@ -1289,6 +1289,7 @@ version = "0.1.3"
 dependencies = [
  "anyhow",
  "backhand",
+ "base64 0.22.1",
  "bip32",
  "bytesize",
  "cargo_metadata 0.19.1",

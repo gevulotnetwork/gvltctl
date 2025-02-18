@@ -38,6 +38,7 @@ thiserror = "1"
 
 # Linux VM builder v2 dependencies
 backhand = { version = "0.20", optional = true, default-features = false, features = ["xz"] }
+base64 = { version = "0.22", optional = true }
 bytesize = { version = "1", optional = true }
 directories = { version = "5", optional = true }
 fatfs = { version = "0.3", optional = true }
@@ -60,6 +61,7 @@ openssl-vendored = ["openssl/vendored"]
 # Use new version of Linux VM builder (unstable)
 vm-builder-v2 = [
     "dep:backhand",
+    "dep:base64",
     "dep:bytesize",
     "dep:directories",
     "dep:fatfs",
