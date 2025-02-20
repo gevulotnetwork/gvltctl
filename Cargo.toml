@@ -27,7 +27,7 @@ toml = "0.8.19"
 openssl = { version = "*", optional = true }
 
 # Linux VM builder dependencies
-mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", tag = "mia-installer-0.2.5" }
+mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", tag = "mia-installer-0.3.0" }
 
 anyhow = "1"
 log = "0.4.22"
