@@ -1,9 +1,9 @@
 use anyhow::{bail, Context, Result};
-use backhand::{FilesystemWriter, NodeHeader};
+use backhand::{FilesystemReader, FilesystemWriter, NodeHeader};
 use bytesize::ByteSize;
 use log::{debug, info, trace};
 use std::fs;
-use std::io::{self, Seek, SeekFrom};
+use std::io::{self, BufReader, Seek, SeekFrom};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
@@ -13,42 +13,42 @@ use crate::builders::Step;
 
 use super::LinuxVMBuildContext;
 
-/// SquashFS handler.
+/// SquashFS adapter.
 #[derive(Debug)]
-pub struct SquashFs<'a, 'b, 'c> {
-    fs_writer: FilesystemWriter<'a, 'b, 'c>,
+pub struct SquashFs<'a> {
+    fs_image: &'a Path,
 }
 
-impl<'a, 'b, 'c> SquashFs<'a, 'b, 'c> {
-    /// Create new SquashFS handler.
-    pub fn new() -> Self {
-        let mut fs_writer = FilesystemWriter::default();
-        fs_writer.set_current_time();
-        Self { fs_writer }
+impl<'a> SquashFs<'a> {
+    /// Get new SquashFS adapter for existing SquashFS image.
+    pub fn get(fs_image: &'a Path) -> Self {
+        Self { fs_image }
     }
 
-    /// Reference to filesystem writer.
-    #[allow(unused)]
-    pub fn fs_writer(&self) -> &FilesystemWriter<'a, 'b, 'c> {
-        &self.fs_writer
+    /// Create new SquashFS image,
+    pub fn format(fs_image: &'a Path) -> Result<()> {
+        let file =
+            fs::File::create_new(fs_image).context("failed to create SquashFS image file")?;
+        FilesystemWriter::default()
+            .write(file)
+            .context("failed to write filesystem")?;
+        Ok(())
     }
 
-    /// Mutable reference to filesystem writer.
-    pub fn fs_writer_mut(&mut self) -> &mut FilesystemWriter<'a, 'b, 'c> {
-        &mut self.fs_writer
+    /// Size of SquashFS image.
+    pub fn size(&self) -> Result<u64> {
+        Ok(fs::metadata(self.fs_image)
+            .context("failed to get SquashFS image file metadata")?
+            .len())
     }
 
     /// Add directory and all of its content recursively to the root of filesystem.
-    pub fn push_dir_recursively(&mut self, source: &Path) -> Result<()> {
+    pub fn push_dir_recursively(&self, source: &Path) -> Result<()> {
         debug_assert!(source.is_dir());
-        Self::push_dir_recursively_inner(&mut self.fs_writer, source, source)
+        Self::push_dir_recursively_inner(self.fs_image, source, source)
     }
 
-    fn push_dir_recursively_inner(
-        fs_writer: &mut FilesystemWriter,
-        base: &Path,
-        source: &Path,
-    ) -> Result<()> {
+    fn push_dir_recursively_inner(fs_image: &Path, base: &Path, source: &Path) -> Result<()> {
         for entry_result in source
             .read_dir()
             .context("failed to read RootFS directory")?
@@ -72,15 +72,31 @@ impl<'a, 'b, 'c> SquashFs<'a, 'b, 'c> {
             let relative_path = entry_path
                 .strip_prefix(base)
                 .context("failed to strip prefix from entry path")?;
+
+            // Note: file juggling below is required to avoid opening too many files at the same time.
+            // FilesystemWriter stores opened file descriptor. Using a single instance of that to push
+            // whole directory may result into "Too many open files (os error 24)".
+            // Because of that we re-create SquashFS image for each file we write.
+            // Unfortunately this does affect the performance. Hopefully there is a better solution.
+
+            // Get current SquashFS
+            let file = BufReader::new(
+                fs::File::open(fs_image).context("failed to open SquashFS image file")?,
+            );
+            let fs_reader =
+                FilesystemReader::from_reader(file).context("failed to read SquashFS image")?;
+            let mut fs_writer = FilesystemWriter::from_fs_reader(&fs_reader)
+                .context("failed to create SquashFS writer")?;
+
+            // Modify it
             if file_type.is_dir() {
                 trace!("creating directory squashfs:/{}", relative_path.display());
                 fs_writer.push_dir(relative_path, header).context(format!(
                     "failed to create directory in SquashFS: {}",
                     relative_path.display()
                 ))?;
-                Self::push_dir_recursively_inner(fs_writer, base, &entry.path())?;
             } else if file_type.is_file() {
-                let reader = fs::File::open(&entry_path)?;
+                let reader = fs::File::open(&entry_path).context("failed to open source file")?;
                 trace!("creating file squashfs:/{}", relative_path.display());
                 fs_writer
                     .push_file(reader, relative_path, header)
@@ -98,58 +114,71 @@ impl<'a, 'b, 'c> SquashFs<'a, 'b, 'c> {
             } else {
                 bail!("unknown file type for entry '{}'", entry.path().display());
             }
+
+            // Write modified SquashFS to temp file
+            let tmp_dir = tempdir::TempDir::new("").context("failed to create temp directory")?;
+            let tmp_path = tmp_dir.path().join("tmp");
+            let mut tmp = fs::File::create_new(&tmp_path).context("failed to create temp file")?;
+            fs_writer
+                .write(&mut tmp)
+                .context("failed to write to temp file")?;
+            drop(tmp);
+
+            // Implicitly close image file to re-open it later
+            drop(fs_writer);
+            drop(fs_reader);
+
+            // Replace image content with content from temp file
+            fs::copy(&tmp_path, fs_image).context("failed to write SquashFS image")?;
+
+            // Remove temp file
+            drop(tmp_dir);
+
+            if file_type.is_dir() {
+                Self::push_dir_recursively_inner(fs_image, base, &entry.path())?;
+            }
         }
         // TODO: handle duplications
         Ok(())
     }
 }
 
-/// Initialize SquashFS handler.
+/// Format new SquashFS image.
 ///
 /// # Context variables defined:
-/// - `squashfs`: [`SquashFs`]
-pub struct Init;
+/// - `squashfs`: [`PathBuf`]
+pub struct Format;
 
-impl Step<LinuxVMBuildContext> for Init {
+impl Step<LinuxVMBuildContext> for Format {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
-        debug!("initializing SquashFS handler");
-        let squashfs = SquashFs::new();
-        ctx.set("squashfs", Box::new(squashfs));
+        debug!("formatting SquashFS");
+        let squashfs_image_path = ctx.tmp().join("root.squashfs");
+        SquashFs::format(&squashfs_image_path).context("failed to format SquashFS")?;
+        ctx.set("squashfs", Box::new(squashfs_image_path));
         Ok(())
     }
 }
 
 /// Evaluate the size of the partition required to store this filesystem.
-/// Also writes SquashFS image into temp file.
 ///
 /// # Context variables required:
-/// - `squashfs` (will be removed on this step to prevent multiple writes)
+/// - `squashfs`
 ///
 /// # Context variables defined:
 /// - `root-partition-size`: [`u64`]
-/// - `squashfs-image`: [`PathBuf`]
 pub struct EvaluateSize;
 
 impl Step<LinuxVMBuildContext> for EvaluateSize {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         debug!("calculating disk space for SquashFS");
-        let mut squashfs = ctx.pop::<SquashFs>("squashfs").expect("squashfs");
+        let squashfs = SquashFs::get(ctx.get::<PathBuf>("squashfs").expect("squashfs"));
+        let size = squashfs
+            .size()
+            .context("failed to get SquashFS image size")?;
 
-        let squashfs_image_path = ctx.tmp().join("root.squashfs");
-        debug!(
-            "writing SquashFS to temp file {}",
-            squashfs_image_path.display(),
-        );
-        let mut tmp = fs::File::create_new(&squashfs_image_path)
-            .context("failed to create temp file for SquashFS")?;
-        let (_, size) = squashfs
-            .fs_writer_mut()
-            .write(&mut tmp)
-            .context("failed to write SquashFS to temp file")?;
         debug!("SquashFS size: {}", ByteSize::b(size).to_string_as(true));
 
         ctx.set("root-partition-size", Box::new(size));
-        ctx.set("squashfs-image", Box::new(squashfs_image_path));
         Ok(())
     }
 }
@@ -158,16 +187,14 @@ impl Step<LinuxVMBuildContext> for EvaluateSize {
 ///
 /// # Context variables required:
 /// - `image-file`
-/// - `squashfs-image`
+/// - `squashfs`
 /// - `root-partition-number`
 pub struct WriteSquashFs;
 
 impl Step<LinuxVMBuildContext> for WriteSquashFs {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         let image_file = ctx.get::<ImageFile>("image-file").expect("image-file");
-        let squashfs_image = ctx
-            .get::<PathBuf>("squashfs-image")
-            .expect("squashfs-image");
+        let squashfs_image = ctx.get::<PathBuf>("squashfs").expect("squashfs");
         let root_partition_number = *ctx
             .get::<usize>("root-partition-number")
             .expect("root-partition-number");

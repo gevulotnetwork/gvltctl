@@ -279,6 +279,7 @@ impl LinuxVMBuildContext {
 
     /// Pop value from context by key. `T` is a downcast type of value.
     /// Returns `None` if `key` doesn't exists or downcast type is wrong.
+    #[allow(unused)]
     pub fn pop<T>(&mut self, key: &'static str) -> Option<Box<T>>
     where
         T: 'static,
@@ -403,7 +404,7 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
 
     match &ctx.opts().root_fs_opts {
         RootFsOpts::SquashFs => {
-            steps.push(Box::new(filesystem::squashfs::Init));
+            steps.push(Box::new(filesystem::squashfs::Format));
             steps.push(Box::new(rootfs::InstallToSquashFs));
             steps.push(Box::new(filesystem::squashfs::EvaluateSize));
         }

@@ -108,8 +108,10 @@ impl Step<LinuxVMBuildContext> for InstallToSquashFs {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         info!("writing root filesystem to SquashFS");
         let rootfs = ctx.get::<PathBuf>("root-fs").expect("root-fs").to_owned();
-        let squashfs = ctx.get_mut::<SquashFs>("squashfs").expect("squashfs");
-        squashfs.push_dir_recursively(&rootfs)?;
+        let squashfs = SquashFs::get(ctx.get_mut::<PathBuf>("squashfs").expect("squashfs"));
+        squashfs
+            .push_dir_recursively(&rootfs)
+            .context("failed to write root filesystem to SquashFS")?;
         Ok(())
     }
 }
