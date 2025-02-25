@@ -1,5 +1,6 @@
 use anyhow::{bail, Context, Result};
-use backhand::{FilesystemReader, FilesystemWriter, NodeHeader};
+use backhand::compression::Compressor;
+use backhand::{FilesystemCompressor, FilesystemReader, FilesystemWriter, NodeHeader};
 use bytesize::ByteSize;
 use log::{debug, info, trace};
 use std::fs;
@@ -29,17 +30,44 @@ impl<'a> SquashFs<'a> {
     pub fn format(fs_image: &'a Path) -> Result<()> {
         let file =
             fs::File::create_new(fs_image).context("failed to create SquashFS image file")?;
-        FilesystemWriter::default()
+        let mut fs_writer = FilesystemWriter::default();
+        let compressor = FilesystemCompressor::new(Compressor::None, None)
+            .context("failed to create compressor for SquashFS")?;
+        fs_writer.set_compressor(compressor);
+        fs_writer
             .write(file)
             .context("failed to write filesystem")?;
         Ok(())
     }
 
-    /// Size of SquashFS image.
-    pub fn size(&self) -> Result<u64> {
-        Ok(fs::metadata(self.fs_image)
-            .context("failed to get SquashFS image file metadata")?
-            .len())
+    /// Compress SquashFS with default compressor (`xz`), returning the size of compressed image.
+    pub fn compress(&self) -> Result<u64> {
+        let file = BufReader::new(
+            fs::File::open(self.fs_image).context("failed to open SquashFS image file")?,
+        );
+        let fs_reader =
+            FilesystemReader::from_reader(file).context("failed to read SquashFS image")?;
+        let mut fs_writer = FilesystemWriter::from_fs_reader(&fs_reader)
+            .context("failed to create SquashFS writer")?;
+
+        fs_writer.set_compressor(FilesystemCompressor::default());
+
+        // Write modified SquashFS to temp file
+        let tmp_dir = tempdir::TempDir::new("").context("failed to create temp directory")?;
+        let tmp_path = tmp_dir.path().join("tmp");
+        let mut tmp = fs::File::create_new(&tmp_path).context("failed to create temp file")?;
+        fs_writer
+            .write(&mut tmp)
+            .context("failed to write to temp file")?;
+        drop(tmp);
+
+        // Implicitly close image file to re-open it later
+        drop(fs_writer);
+        drop(fs_reader);
+
+        // Replace image content with content from temp file
+        let size = fs::copy(&tmp_path, self.fs_image).context("failed to write SquashFS image")?;
+        Ok(size)
     }
 
     /// Add directory and all of its content recursively to the root of filesystem.
@@ -159,7 +187,7 @@ impl Step<LinuxVMBuildContext> for Format {
     }
 }
 
-/// Evaluate the size of the partition required to store this filesystem.
+/// Compress and evaluate the size of the partition required to store this filesystem.
 ///
 /// # Context variables required:
 /// - `squashfs`
@@ -172,9 +200,7 @@ impl Step<LinuxVMBuildContext> for EvaluateSize {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         debug!("calculating disk space for SquashFS");
         let squashfs = SquashFs::get(ctx.get::<PathBuf>("squashfs").expect("squashfs"));
-        let size = squashfs
-            .size()
-            .context("failed to get SquashFS image size")?;
+        let size = squashfs.compress().context("failed to compress SquashFS")?;
 
         debug!("SquashFS size: {}", ByteSize::b(size).to_string_as(true));
 
