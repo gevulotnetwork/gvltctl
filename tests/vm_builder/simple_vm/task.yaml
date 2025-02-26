@@ -1,0 +1,25 @@
+kind: Task
+version: v0
+metadata:
+  name: ""
+  description: ""
+  tags: []
+  labels: []
+spec:
+  image: ""
+  command: ["sh"]
+  args: ["/main.sh"]
+  env: []
+  resources:
+    cpus: 0
+    gpus: 0
+    memory: 0
+    time: 0
+  inputContexts:
+    - source: file://inputs/input.txt
+      target: /mnt/gevulot/input/input.txt
+  outputContexts:
+    - source: /mnt/gevulot/output/output.txt
+      retentionPeriod: -1
+  storeStdout: true
+  storeStderr: true
