@@ -25,6 +25,7 @@ serde_yaml = "0.9.34"
 tokio = { version = "1", features = ["full"] }
 toml = "0.8.19"
 openssl = { version = "*", optional = true }
+which = "7"
 
 # Linux VM builder dependencies
 mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", tag = "mia-installer-0.2.5" }
