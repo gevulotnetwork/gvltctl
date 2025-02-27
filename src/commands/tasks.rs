@@ -193,6 +193,13 @@ pub async fn create_task(
         .map(|e| (e.source.clone(), e.target.clone()))
         .collect();
 
+    let labels: HashMap<String, String> = task
+        .metadata
+        .labels
+        .into_iter()
+        .map(|label| (label.key, label.value))
+        .collect();
+
     let resp = client
         .tasks
         .create(
@@ -219,6 +226,7 @@ pub async fn create_task(
                 .time(task.spec.resources.time as u64)
                 .store_stdout(task.spec.store_stdout.unwrap_or(false))
                 .store_stderr(task.spec.store_stderr.unwrap_or(false))
+                .labels(labels)
                 .into_message()?,
         )
         .await?;
