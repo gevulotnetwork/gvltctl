@@ -114,6 +114,7 @@ jobs:
         run: |-
           ./gvltctl local-run disk.img \
             --file task.yaml \
+            --input inputs/input.txt:input.txt \
             --stdout \
             --stderr \
             --smp 1 \

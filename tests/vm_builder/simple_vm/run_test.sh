@@ -8,6 +8,7 @@ RUST_LOG=gvltctl=trace ../../../target/debug/gvltctl build --force --containerfi
 
 RUST_LOG=gvltctl=trace ../../../target/debug/gvltctl local-run disk.img \
     --file task.yaml \
+    --input inputs/input.txt:input.txt \
     --stdout \
     --stderr \
     --smp 1 \

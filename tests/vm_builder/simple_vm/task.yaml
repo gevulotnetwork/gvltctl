@@ -15,9 +15,7 @@ spec:
     gpus: 0
     memory: 0
     time: 0
-  inputContexts:
-    - source: file://inputs/input.txt
-      target: /mnt/gevulot/input/input.txt
+  inputContexts: []
   outputContexts:
     - source: /mnt/gevulot/output/output.txt
       retentionPeriod: -1

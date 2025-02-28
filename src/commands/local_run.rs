@@ -1,4 +1,5 @@
 use anyhow::Context;
+use clap::builder::TypedValueParser;
 use gevulot_rs::models::{InputContext, OutputContext, Task, TaskEnv, TaskResources, TaskSpec};
 use gevulot_rs::runtime_config::{self, DebugExit, RuntimeConfig};
 use log::debug;
@@ -65,24 +66,45 @@ pub struct RunArgs {
     #[arg(long, requires = "command", allow_hyphen_values = true)]
     args: Vec<String>,
 
-    /// Input for VM. Example: "./file.txt:/mnt/gevulot/input/file.txt"
+    /// Input file passed to VM.
     ///
-    /// Format: <local_path>:<path_in_vm>
-    /// All VM paths must start with prefix `/mnt/gevulot/input`.
-    #[arg(short = 'i', long = "input", value_name = "FILE:PATH")]
-    inputs: Vec<String>,
+    /// SOURCE is path to a local file and TARGET is a path inside VM
+    /// where this file will be put.
+    ///
+    /// If TARGET is an absolute path, it must start with prefix /mnt/gevulot/input.
+    /// If it is relative, it will be treated as relative to /mnt/gevulot/input direcotry.
+    ///
+    /// Examples:
+    ///
+    /// --input file.txt:file.txt
+    ///
+    /// --input file.txt:/mnt/gevulot/input/file.txt
+    #[arg(
+        short = 'i',
+        long = "input",
+        value_name = "SOURCE:TARGET",
+        value_parser = RunInputParser,
+    )]
+    inputs: Vec<RunInput>,
 
-    /// Output of VM. Example: "/mnt/gevulot/output/file.txt"
+    /// Ouput file in VM to store.
     ///
-    /// All VM paths must start with prefix `/mnt/output/input`.
+    /// If PATH is an absolute path, it must start with prefix /mnt/gevulot/output.
+    /// If it is relative, it will be treated as relative to /mnt/gevulot/output direcotry.
+    ///
+    /// Examples:
+    ///
+    /// --output file.txt
+    ///
+    /// --output /mnt/gevulot/output/file.txt
     #[arg(short = 'o', long = "output", value_name = "PATH")]
     outputs: Vec<String>,
 
-    /// Print stdout of VM while executing.
+    /// Print stdout of VM during execution.
     #[arg(long, default_value_t)]
     stdout: bool,
 
-    /// Print stderr of VM while executing.
+    /// Print stderr of VM during execution.
     #[arg(long, default_value_t)]
     stderr: bool,
 
@@ -97,6 +119,56 @@ pub struct RunArgs {
     /// Directory to store output files if some.
     #[arg(long, value_name = "DIR", default_value = "output")]
     output_dir: PathBuf,
+}
+
+#[derive(Clone, Debug)]
+struct RunInput {
+    source: String,
+    target: String,
+}
+
+#[derive(Clone, Debug)]
+struct RunInputParser;
+
+impl TypedValueParser for RunInputParser {
+    type Value = RunInput;
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        _arg: Option<&clap::Arg>,
+        value: &OsStr,
+    ) -> std::result::Result<Self::Value, clap::Error> {
+        use clap::builder::StyledStr;
+        use clap::error::ErrorKind;
+        use clap::error::{ContextKind, ContextValue};
+
+        let value = value
+            .to_str()
+            .ok_or_else(|| clap::Error::new(ErrorKind::InvalidUtf8).with_cmd(cmd))?;
+
+        let (source, target) = value.split_once(':').ok_or_else(|| {
+            let mut err = clap::Error::new(ErrorKind::ValueValidation).with_cmd(cmd);
+            err.insert(
+                ContextKind::Suggested,
+                ContextValue::StyledStrs(vec![StyledStr::from(
+                    "format of --input argument should be SOURCE:TARGET".to_string(),
+                )]),
+            );
+            err
+        })?;
+
+        // FIXME: because ':' is a valid symbol in paths, this options is ambiguous.
+        // E.g. how should we treat this input: "foo:bar:baz"?
+        // Is it source="foo:bar" and target="baz" or source="foo" and target="bar:baz"?
+        // However this is such a corner case, that we will just leave this for now.
+        // First occurence of ':' is now treated as a separator.
+
+        Ok(RunInput {
+            source: source.to_string(),
+            target: target.to_string(),
+        })
+    }
 }
 
 const DEFAULT_QEMU: &str = "qemu-system-x86_64";
@@ -130,11 +202,6 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
         .map_err(into_anyhow)
         .context("failed to compile task specification")?;
     debug!("task specification: {:#?}", &task_spec);
-
-    validate_task(&task_spec)
-        .await
-        .map_err(into_anyhow)
-        .context("invalid task specification")?;
 
     let runtime_cfg = generate_runtime_config(&task_spec).await;
     debug!("runtime config: {:#?}", &runtime_cfg);
@@ -184,10 +251,14 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
     .context("failed to generate QEMU arguments")?;
     debug!("QEMU cmd: {:#?}", &cmd);
 
-    create_output_directory(run_args, &task_spec)
-        .await
-        .map_err(into_anyhow)
-        .context("failed to create output directory")?;
+    if !task_spec.output_contexts.is_empty()
+        || task_spec.store_stdout.unwrap_or_default()
+        || task_spec.store_stderr.unwrap_or_default()
+    {
+        fs::create_dir_all(&run_args.output_dir)
+            .await
+            .context("failed to create output directory")?;
+    }
 
     let stdout_file = task_spec
         .store_stdout
@@ -218,6 +289,60 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
     }))
 }
 
+fn create_input_context(run_input: &RunInput) -> Result<InputContext> {
+    let source = path::absolute(&run_input.source)?
+        .to_str()
+        .ok_or("non-UTF-8 charecter in path".to_string())?
+        .to_string();
+
+    let target_path = PathBuf::from(&run_input.target);
+    let target = if target_path.is_absolute() {
+        if target_path.starts_with(GEVULOT_INPUT_MOUNTPOINT) {
+            target_path
+        } else {
+            return Err(format!(
+                "input target must start with '{}': {}",
+                GEVULOT_INPUT_MOUNTPOINT, run_input.target
+            )
+            .into());
+        }
+    } else {
+        Path::new(GEVULOT_INPUT_MOUNTPOINT).join(&target_path)
+    }
+    .to_str()
+    .ok_or("non-UTF-8 charecter in path".to_string())?
+    .to_string();
+
+    Ok(InputContext {
+        source: format!("file://{}", source),
+        target: target,
+    })
+}
+
+fn create_output_context(output: &str) -> Result<OutputContext> {
+    let output_path = PathBuf::from(output);
+    let output = if output_path.is_absolute() {
+        if !output_path.starts_with(GEVULOT_OUTPUT_MOUNTPOINT) {
+            output_path
+        } else {
+            return Err(format!(
+                "output path must start with '{}': {}",
+                GEVULOT_OUTPUT_MOUNTPOINT, output
+            )
+            .into());
+        }
+    } else {
+        Path::new(GEVULOT_OUTPUT_MOUNTPOINT).join(&output)
+    };
+    Ok(OutputContext {
+        source: output
+            .to_str()
+            .ok_or("non-UTF-8 charecter in path".to_string())?
+            .to_string(),
+        retention_period: -1,
+    })
+}
+
 async fn get_task_spec(run_args: &RunArgs) -> Result<TaskSpec> {
     let mut task_spec = if let Some(path) = &run_args.file {
         read_file::<Task>(Some(path.as_path())).await?.spec
@@ -244,7 +369,7 @@ async fn get_task_spec(run_args: &RunArgs) -> Result<TaskSpec> {
         let path_str = absolute_path
             .as_os_str()
             .to_str()
-            .ok_or::<Error>("non-UTF-8 path".into())?
+            .ok_or::<Error>("non-UTF-8 charecter in path".into())?
             .to_string();
         task_spec.image = format!("file://{}", path_str);
     }
@@ -263,20 +388,13 @@ async fn get_task_spec(run_args: &RunArgs) -> Result<TaskSpec> {
     }
 
     for input in &run_args.inputs {
-        let (file, path) = input
-            .split_once(':')
-            .ok_or::<Error>(format!("invalid input format: {}", input).into())?;
-        task_spec.input_contexts.push(InputContext {
-            source: format!("file://{}", file),
-            target: path.to_string(),
-        });
+        task_spec.input_contexts.push(create_input_context(input)?);
     }
 
     for output in &run_args.outputs {
-        task_spec.output_contexts.push(OutputContext {
-            source: output.clone(),
-            retention_period: -1,
-        });
+        task_spec
+            .output_contexts
+            .push(create_output_context(output)?);
     }
 
     if let Some(smp) = run_args.smp {
@@ -294,43 +412,6 @@ async fn get_task_spec(run_args: &RunArgs) -> Result<TaskSpec> {
         task_spec.store_stderr = Some(true);
     }
     Ok(task_spec)
-}
-
-async fn validate_task(task_spec: &TaskSpec) -> Result<()> {
-    if let Some(path) = task_spec.image.strip_prefix("file://") {
-        tokio::fs::metadata(path)
-            .await
-            .map_err::<Error, _>(|_| format!("VM file not found: {}", path).into())?;
-    }
-
-    for input in &task_spec.input_contexts {
-        // if source is local file, check that it exists
-        if let Some(file) = input.source.strip_prefix("file://") {
-            tokio::fs::metadata(file)
-                .await
-                .map_err::<Error, _>(|_| format!("input file not found: {}", file).into())?;
-        }
-
-        if !input.target.starts_with(GEVULOT_INPUT_MOUNTPOINT) {
-            return Err(format!(
-                "input path must start with '{}': {}",
-                GEVULOT_INPUT_MOUNTPOINT, input.target
-            )
-            .into());
-        }
-    }
-
-    for output in &task_spec.output_contexts {
-        if !output.source.starts_with(GEVULOT_OUTPUT_MOUNTPOINT) {
-            return Err(format!(
-                "output path must start with '{}': {}",
-                GEVULOT_OUTPUT_MOUNTPOINT, output.source
-            )
-            .into());
-        }
-    }
-
-    Ok(())
 }
 
 async fn generate_runtime_config(task_spec: &TaskSpec) -> RuntimeConfig {
@@ -376,10 +457,12 @@ impl RuntimeDirs {
 }
 
 async fn prepare_vm_image(task_spec: &mut TaskSpec) -> Result<()> {
-    if task_spec.image.starts_with("file://") {
-        // local file, do nothing
+    if let Some(path) = task_spec.image.strip_prefix("file://") {
+        tokio::fs::metadata(path)
+            .await
+            .map_err::<Error, _>(|_| format!("VM file not found: {}", path).into())?;
     } else {
-        // remove file, need to download
+        // need to download file
         task_spec.image = "file://".to_string();
         todo!("download VM image from remote");
     }
@@ -389,6 +472,9 @@ async fn prepare_vm_image(task_spec: &mut TaskSpec) -> Result<()> {
 async fn prepare_inputs(task_spec: &mut TaskSpec, runtime_input: &Path) -> Result<()> {
     for input in &mut task_spec.input_contexts {
         if let Some(path) = input.source.strip_prefix("file://") {
+            tokio::fs::metadata(path)
+                .await
+                .map_err::<Error, _>(|_| format!("input file not found: {}", path).into())?;
             let relative = PathBuf::from(
                 input
                     .target
@@ -403,16 +489,6 @@ async fn prepare_inputs(task_spec: &mut TaskSpec, runtime_input: &Path) -> Resul
             input.source = "file://".to_string();
             todo!("download input context from remote");
         }
-    }
-    Ok(())
-}
-
-async fn create_output_directory(run_args: &RunArgs, task_spec: &TaskSpec) -> Result<()> {
-    if !task_spec.output_contexts.is_empty()
-        || task_spec.store_stdout.unwrap_or_default()
-        || task_spec.store_stderr.unwrap_or_default()
-    {
-        fs::create_dir_all(&run_args.output_dir).await?;
     }
     Ok(())
 }
