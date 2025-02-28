@@ -25,6 +25,10 @@ pub struct RunArgs {
     #[arg(long)]
     qemu_path: Option<PathBuf>,
 
+    /// Additional QEMU arguments.
+    #[arg(long = "qemu-arg", value_name = "ARGS", allow_hyphen_values = true)]
+    qemu_args: Vec<String>,
+
     /// Task file. Only task specification is taken into account.
     ///
     /// Options passed directly through CLI will overwrite options in file.
@@ -162,9 +166,22 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
         .map_err(into_anyhow)
         .context("failed to prepare VM image")?;
 
-    let cmd = build_cmd(&qemu_path, &task_spec, &runtime_dirs, &run_args.gpu)
-        .map_err(into_anyhow)
-        .context("failed to generate QEMU arguments")?;
+    let qemu_args = run_args
+        .qemu_args
+        .iter()
+        .map(|arg| arg.split(' '))
+        .flatten()
+        .collect::<Vec<_>>();
+
+    let cmd = build_cmd(
+        &qemu_path,
+        &task_spec,
+        &runtime_dirs,
+        &run_args.gpu,
+        &qemu_args,
+    )
+    .map_err(into_anyhow)
+    .context("failed to generate QEMU arguments")?;
     debug!("QEMU cmd: {:#?}", &cmd);
 
     create_output_directory(run_args, &task_spec)
@@ -426,6 +443,7 @@ fn build_cmd(
     task_spec: &TaskSpec,
     runtime_dirs: &RuntimeDirs,
     gpu: &[String],
+    qemu_args: &[&str],
 ) -> Result<Command> {
     let mut cmd = Command::new(qemu_path.as_os_str());
 
@@ -502,6 +520,8 @@ fn build_cmd(
         GEVULOT_OUTPUT_TAG
     ));
     cmd.args([OsStr::new("-virtfs"), output_arg.as_os_str()]);
+
+    cmd.args(qemu_args);
 
     Ok(cmd)
 }
