@@ -9,6 +9,7 @@ use std::ffi::{OsStr, OsString};
 use std::path::{self, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
+use std::time::Instant;
 use tempdir::TempDir;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
@@ -328,6 +329,7 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
         .unwrap_or_default()
         .then(|| run_args.output_dir.join("stderr"));
 
+    let timestamp = Instant::now();
     run_cmd(
         cmd,
         stdout_file,
@@ -337,6 +339,7 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
     )
     .map_err(into_anyhow)
     .context("QEMU failed")?;
+    let execution_time = timestamp.elapsed();
 
     store_outputs(run_args, &task_spec, &runtime_dirs.output)
         .await
@@ -344,7 +347,8 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
         .context("failed to store output context")?;
 
     Ok(serde_json::json!({
-        "message": "VM program exited successfully"
+        "message": "VM program exited successfully",
+        "execution_time": execution_time.as_secs()
     }))
 }
 
