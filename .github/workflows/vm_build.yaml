@@ -13,8 +13,7 @@ jobs:
   build-gvltctl:
     name: Build gvltctl
 
-    # Matches test-vm-builder to avoid errors
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu
 
     steps:
       - name: Checkout sources
@@ -58,13 +57,11 @@ jobs:
           overwrite: true
 
   test-vm-builder:
-    name: Test VM builder
+    name: Build and run test VM
 
     needs: [build-gvltctl]
 
-    # It's important to run on Ubuntu 24, not Ubuntu 22, because
-    # fuse2fs is required to be >=1.47 and Ubuntu 22 only has 1.46.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu
 
     steps:
       - name: Checkout sources
