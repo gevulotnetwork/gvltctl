@@ -332,8 +332,8 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
     let timestamp = Instant::now();
     run_cmd(
         cmd,
-        stdout_file,
-        stderr_file,
+        stdout_file.clone(),
+        stderr_file.clone(),
         run_args.stdout,
         run_args.stderr,
     )
@@ -341,14 +341,17 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
     .context("QEMU failed")?;
     let execution_time = timestamp.elapsed();
 
-    store_outputs(run_args, &task_spec, &runtime_dirs.output)
+    let output_paths = store_outputs(run_args, &task_spec, &runtime_dirs.output)
         .await
         .map_err(into_anyhow)
         .context("failed to store output context")?;
 
     Ok(serde_json::json!({
         "message": "VM program exited successfully",
-        "execution_time": execution_time.as_secs()
+        "execution_time": execution_time.as_secs(),
+        "output_contexts": output_paths,
+        "stdout": stdout_file,
+        "stderr": stderr_file,
     }))
 }
 
@@ -632,7 +635,8 @@ async fn store_outputs(
     run_args: &RunArgs,
     task_spec: &TaskSpec,
     runtime_output: &Path,
-) -> Result<()> {
+) -> Result<Vec<PathBuf>> {
+    let mut output_paths = vec![];
     for output in &task_spec.output_contexts {
         let relative = PathBuf::from(
             output
@@ -644,9 +648,11 @@ async fn store_outputs(
         if let Some(parent) = local.parent() {
             fs::create_dir_all(run_args.output_dir.join(parent)).await?;
         }
-        fs::copy(local, run_args.output_dir.join(&relative)).await?;
+        let output_path = run_args.output_dir.join(&relative);
+        fs::copy(local, &output_path).await?;
+        output_paths.push(output_path);
     }
-    Ok(())
+    Ok(output_paths)
 }
 
 fn build_cmd(
