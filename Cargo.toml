@@ -15,6 +15,7 @@ cargo_metadata = "0.19"
 clap = { version = "4", features = ["derive", "env", "string"] }
 clap_complete = "4.5.13"
 cosmrs = "0.20"
+downloader = "0.2"
 env_logger = "0.11.5"
 patharg = "0.4"
 rand_core = "0.6.4"

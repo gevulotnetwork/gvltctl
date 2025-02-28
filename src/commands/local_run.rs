@@ -1,5 +1,6 @@
 use anyhow::Context;
 use clap::builder::TypedValueParser;
+use downloader::{Download, Downloader};
 use gevulot_rs::models::{InputContext, OutputContext, Task, TaskEnv, TaskResources, TaskSpec};
 use gevulot_rs::runtime_config::{self, DebugExit, RuntimeConfig};
 use log::debug;
@@ -259,7 +260,6 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
         .await
         .map_err(into_anyhow)
         .context("failed to compile task specification")?;
-    debug!("task specification: {:#?}", &task_spec);
 
     let runtime_cfg = generate_runtime_config(&task_spec).await;
     debug!("runtime config: {:#?}", &runtime_cfg);
@@ -286,7 +286,7 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
         .map_err(into_anyhow)
         .context("failed to prepare input context")?;
 
-    prepare_vm_image(&mut task_spec)
+    prepare_vm_image(&mut task_spec, runtime_dirs.root.path())
         .await
         .map_err(into_anyhow)
         .context("failed to prepare VM image")?;
@@ -296,6 +296,8 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
         .iter()
         .flat_map(|arg| arg.split(' '))
         .collect::<Vec<_>>();
+
+    debug!("task specification: {:#?}", &task_spec);
 
     let cmd = build_cmd(
         &qemu_path,
@@ -521,22 +523,53 @@ impl RuntimeDirs {
     }
 }
 
-async fn prepare_vm_image(task_spec: &mut TaskSpec) -> Result<()> {
+async fn prepare_vm_image(task_spec: &mut TaskSpec, runtime_path: &Path) -> Result<()> {
     if let Some(path) = task_spec.image.strip_prefix("file://") {
         tokio::fs::metadata(path)
             .await
             .map_err::<Error, _>(|_| format!("VM file not found: {}", path).into())?;
     } else {
-        // need to download file
-        task_spec.image = "file://".to_string();
-        todo!("download VM image from remote");
+        // download VM image and update source path
+        let mut downloader = Downloader::builder()
+            .download_folder(runtime_path)
+            .build()?;
+        let vm_image = Download::new(&task_spec.image).file_name(Path::new("v.img"));
+        let summary = downloader
+            .async_download(&[vm_image])
+            .await?
+            .into_iter()
+            .next()
+            .ok_or("failed to download VM image".to_string())??;
+        let status_code = summary
+            .status
+            .first()
+            .ok_or("failed to download VM image".to_string())?
+            .1;
+        if status_code != 200 {
+            return Err(format!("failed to download VM image: status code {}", status_code).into());
+        }
+        task_spec.image = format!(
+            "file://{}",
+            summary
+                .file_name
+                .as_os_str()
+                .to_str()
+                .ok_or("non-UTF-8 charecter in path".to_string())?
+        );
     }
     Ok(())
 }
 
 async fn prepare_inputs(task_spec: &mut TaskSpec, runtime_input: &Path) -> Result<()> {
+    let mut inputs_to_download = vec![];
+    let mut inputs_sources = vec![];
+    let mut downloader = Downloader::builder()
+        .download_folder(runtime_input)
+        .build()?;
+
     for input in &mut task_spec.input_contexts {
         if let Some(path) = input.source.strip_prefix("file://") {
+            // copy local source into runtime input dir
             tokio::fs::metadata(path)
                 .await
                 .map_err::<Error, _>(|_| format!("input file not found: {}", path).into())?;
@@ -551,10 +584,43 @@ async fn prepare_inputs(task_spec: &mut TaskSpec, runtime_input: &Path) -> Resul
             }
             fs::copy(path, runtime_input.join(relative)).await?;
         } else {
-            input.source = "file://".to_string();
-            todo!("download input context from remote");
+            // schedule remote source for downloading
+            inputs_to_download.push(Download::new(&input.source));
+            inputs_sources.push(&mut input.source);
         }
     }
+
+    // perform downloading and update source paths
+    let results = downloader.async_download(&inputs_to_download).await?;
+    debug_assert_eq!(results.len(), inputs_sources.len());
+    for (result, source) in results.into_iter().zip(inputs_sources.into_iter()) {
+        match result {
+            Ok(summary) => {
+                let status_code = summary
+                    .status
+                    .first()
+                    .ok_or(format!("failed to download '{}'", source))?
+                    .1;
+                if status_code != 200 {
+                    return Err(format!(
+                        "failed to download '{}': status code {}",
+                        source, status_code
+                    )
+                    .into());
+                }
+                *source = format!(
+                    "file://{}",
+                    summary
+                        .file_name
+                        .as_os_str()
+                        .to_str()
+                        .ok_or("non-UTF-8 charecter in path".to_string())?
+                );
+            }
+            Err(err) => return Err(format!("failed to download '{}': {}", source, err).into()),
+        }
+    }
+
     Ok(())
 }
 
