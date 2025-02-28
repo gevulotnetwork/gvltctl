@@ -270,7 +270,7 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
         .context("failed to create runtime directories")?;
     debug!("runtime dirs: {:#?}", &runtime_dirs);
 
-    let mut runtime_file = fs::File::create(runtime_dirs.runtime_config.path().join("config.yaml"))
+    let mut runtime_file = fs::File::create(runtime_dirs.runtime_config.join("config.yaml"))
         .await
         .context("failed to create runtime configuration")?;
     let runtime_file_content =
@@ -281,7 +281,7 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
         .context("failed to write runtime configuration")?;
     drop(runtime_file);
 
-    prepare_inputs(&mut task_spec, runtime_dirs.input.path())
+    prepare_inputs(&mut task_spec, &runtime_dirs.input)
         .await
         .map_err(into_anyhow)
         .context("failed to prepare input context")?;
@@ -336,7 +336,7 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
     .map_err(into_anyhow)
     .context("QEMU failed")?;
 
-    store_outputs(run_args, &task_spec, runtime_dirs.output.path())
+    store_outputs(run_args, &task_spec, &runtime_dirs.output)
         .await
         .map_err(into_anyhow)
         .context("failed to store output context")?;
@@ -493,17 +493,30 @@ async fn generate_runtime_config(task_spec: &TaskSpec) -> RuntimeConfig {
 
 #[derive(Debug)]
 struct RuntimeDirs {
-    runtime_config: TempDir,
-    input: TempDir,
-    output: TempDir,
+    root: TempDir,
+    runtime_config: PathBuf,
+    input: PathBuf,
+    output: PathBuf,
 }
 
 impl RuntimeDirs {
+    const RUNTIME_CONFIG: &str = "runtime_config";
+    const INPUT: &str = "input";
+    const OUTPUT: &str = "output";
+
     pub async fn new() -> Result<Self> {
+        let root = TempDir::new("gevulot-local-run")?;
+        let runtime_config = root.path().join(Self::RUNTIME_CONFIG);
+        let input = root.path().join(Self::INPUT);
+        let output = root.path().join(Self::OUTPUT);
+        fs::create_dir(&runtime_config).await?;
+        fs::create_dir(&input).await?;
+        fs::create_dir(&output).await?;
         Ok(Self {
-            runtime_config: TempDir::new("gevulot-runtime-config")?,
-            input: TempDir::new("gevulot-input")?,
-            output: TempDir::new("gevulot-output")?,
+            root,
+            runtime_config,
+            input,
+            output,
         })
     }
 }
@@ -626,7 +639,7 @@ fn build_cmd(
     ]);
 
     let mut rt_arg = OsString::from("local,path=");
-    rt_arg.push(runtime_dirs.runtime_config.path().as_os_str());
+    rt_arg.push(runtime_dirs.runtime_config.as_os_str());
     rt_arg.push(format!(
         ",mount_tag={},security_model=none,multidevs=remap,readonly=on",
         GEVULOT_RT_CONFIG_TAG
@@ -634,7 +647,7 @@ fn build_cmd(
     cmd.args([OsStr::new("-virtfs"), rt_arg.as_os_str()]);
 
     let mut input_arg = OsString::from("local,path=");
-    input_arg.push(runtime_dirs.input.path().as_os_str());
+    input_arg.push(runtime_dirs.input.as_os_str());
     input_arg.push(format!(
         ",mount_tag={},security_model=none,multidevs=remap,readonly=on",
         GEVULOT_INPUT_TAG
@@ -642,7 +655,7 @@ fn build_cmd(
     cmd.args([OsStr::new("-virtfs"), input_arg.as_os_str()]);
 
     let mut output_arg = OsString::from("local,path=");
-    output_arg.push(runtime_dirs.output.path().as_os_str());
+    output_arg.push(runtime_dirs.output.as_os_str());
     output_arg.push(format!(
         ",mount_tag={},security_model=none,multidevs=remap",
         GEVULOT_OUTPUT_TAG
