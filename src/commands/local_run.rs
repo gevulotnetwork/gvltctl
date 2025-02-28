@@ -294,8 +294,7 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
     let qemu_args = run_args
         .qemu_args
         .iter()
-        .map(|arg| arg.split(' '))
-        .flatten()
+        .flat_map(|arg| arg.split(' '))
         .collect::<Vec<_>>();
 
     let cmd = build_cmd(
@@ -373,7 +372,7 @@ fn create_input_context(run_input: &RunInput) -> Result<InputContext> {
 
     Ok(InputContext {
         source: format!("file://{}", source),
-        target: target,
+        target,
     })
 }
 
@@ -390,7 +389,7 @@ fn create_output_context(output: &str) -> Result<OutputContext> {
             .into());
         }
     } else {
-        Path::new(GEVULOT_OUTPUT_MOUNTPOINT).join(&output)
+        Path::new(GEVULOT_OUTPUT_MOUNTPOINT).join(output)
     };
     Ok(OutputContext {
         source: output
@@ -560,7 +559,7 @@ async fn store_outputs(
         );
         let local = runtime_output.join(&relative);
         if let Some(parent) = local.parent() {
-            fs::create_dir_all(run_args.output_dir.join(&parent)).await?;
+            fs::create_dir_all(run_args.output_dir.join(parent)).await?;
         }
         fs::copy(local, run_args.output_dir.join(&relative)).await?;
     }
