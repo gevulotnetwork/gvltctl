@@ -52,11 +52,16 @@ pub struct RunArgs {
     #[arg(short = 'g', long)]
     gpu: Vec<String>,
 
-    /// Environment variables to set for main program. E.g. --env KEY=VALUE.
+    /// Environment variables to set for main program. Appends to provided in task file.
     ///
-    /// Appends to provided in task file.
-    #[arg(short = 'e', long)]
-    env: Vec<String>,
+    /// Example: --env KEY=VALUE
+    #[arg(
+        short = 'e',
+        long = "env",
+        value_name = "KEY=VALUE",
+        value_parser = EnvVarParser,
+    )]
+    envs: Vec<EnvVar>,
 
     /// Command to execute in VM (e.g. /bin/uptime).
     #[arg(long)]
@@ -119,6 +124,59 @@ pub struct RunArgs {
     /// Directory to store output files if some.
     #[arg(long, value_name = "DIR", default_value = "output")]
     output_dir: PathBuf,
+}
+
+#[derive(Clone, Debug)]
+struct EnvVar {
+    key: String,
+    value: String,
+}
+
+impl From<&EnvVar> for TaskEnv {
+    fn from(value: &EnvVar) -> Self {
+        TaskEnv {
+            name: value.key.clone(),
+            value: value.value.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct EnvVarParser;
+
+impl TypedValueParser for EnvVarParser {
+    type Value = EnvVar;
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        _arg: Option<&clap::Arg>,
+        value: &OsStr,
+    ) -> std::result::Result<Self::Value, clap::Error> {
+        use clap::builder::StyledStr;
+        use clap::error::ErrorKind;
+        use clap::error::{ContextKind, ContextValue};
+
+        let value = value
+            .to_str()
+            .ok_or_else(|| clap::Error::new(ErrorKind::InvalidUtf8).with_cmd(cmd))?;
+
+        let (key, value) = value.split_once('=').ok_or_else(|| {
+            let mut err = clap::Error::new(ErrorKind::ValueValidation).with_cmd(cmd);
+            err.insert(
+                ContextKind::Suggested,
+                ContextValue::StyledStrs(vec![StyledStr::from(
+                    "format of --input argument should be SOURCE:TARGET".to_string(),
+                )]),
+            );
+            err
+        })?;
+
+        Ok(EnvVar {
+            key: key.to_string(),
+            value: value.to_string(),
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -377,14 +435,9 @@ async fn get_task_spec(run_args: &RunArgs) -> Result<TaskSpec> {
         task_spec.command = vec![command.clone()];
         task_spec.args = run_args.args.clone();
     }
-    for entry in &run_args.env {
-        let (k, v) = entry
-            .split_once('=')
-            .ok_or::<Error>(format!("invalid environment variable format: {}", entry).into())?;
-        task_spec.env.push(TaskEnv {
-            name: k.to_string(),
-            value: v.to_string(),
-        });
+
+    for env_var in &run_args.envs {
+        task_spec.env.push(env_var.into());
     }
 
     for input in &run_args.inputs {
