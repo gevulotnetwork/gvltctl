@@ -1,7 +1,10 @@
 use anyhow::Context;
 use clap::builder::TypedValueParser;
 use downloader::{Download, Downloader};
-use gevulot_rs::models::{InputContext, OutputContext, Task, TaskEnv, TaskResources, TaskSpec};
+use gevulot_rs::models::{
+    ByteUnit, DefaultFactorOneMegabyte, InputContext, OutputContext, Task, TaskEnv, TaskResources,
+    TaskSpec,
+};
 use gevulot_rs::runtime_config::{self, DebugExit, RuntimeConfig};
 use log::debug;
 use serde_json::Value;
@@ -311,10 +314,7 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
     .context("failed to generate QEMU arguments")?;
     debug!("QEMU cmd: {:#?}", &cmd);
 
-    if !task_spec.output_contexts.is_empty()
-        || task_spec.store_stdout.unwrap_or_default()
-        || task_spec.store_stderr.unwrap_or_default()
-    {
+    if !task_spec.output_contexts.is_empty() || task_spec.store_stdout || task_spec.store_stderr {
         fs::create_dir_all(&run_args.output_dir)
             .await
             .context("failed to create output directory")?;
@@ -322,11 +322,9 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
 
     let stdout_file = task_spec
         .store_stdout
-        .unwrap_or_default()
         .then(|| run_args.output_dir.join("stdout"));
     let stderr_file = task_spec
         .store_stderr
-        .unwrap_or_default()
         .then(|| run_args.output_dir.join("stderr"));
 
     let timestamp = Instant::now();
@@ -421,10 +419,10 @@ async fn get_task_spec(run_args: &RunArgs) -> Result<TaskSpec> {
             input_contexts: Default::default(),
             output_contexts: Default::default(),
             resources: TaskResources {
-                cpus: run_args.smp.unwrap_or(1).into(),
-                gpus: Default::default(),
-                memory: run_args.mem.unwrap_or(512).into(),
-                time: Default::default(),
+                cpus: (run_args.smp.unwrap_or(1) as u64).into(),
+                gpus: 0.into(),
+                memory: (run_args.mem.unwrap_or(512) as u64).into(),
+                time: 0.into(),
             },
             store_stdout: Default::default(),
             store_stderr: Default::default(),
@@ -459,18 +457,19 @@ async fn get_task_spec(run_args: &RunArgs) -> Result<TaskSpec> {
     }
 
     if let Some(smp) = run_args.smp {
-        task_spec.resources.cpus = smp as u64;
+        task_spec.resources.cpus = (smp as u64).into();
     }
 
     if let Some(mem) = run_args.mem {
-        task_spec.resources.memory = mem as u64;
+        task_spec.resources.memory =
+            ByteUnit::Number(ByteUnit::<DefaultFactorOneMegabyte>::Number(mem as u64).bytes()?);
     }
 
     if run_args.store_stdout {
-        task_spec.store_stdout = Some(true);
+        task_spec.store_stdout = true;
     }
     if run_args.store_stderr {
-        task_spec.store_stderr = Some(true);
+        task_spec.store_stderr = true;
     }
     Ok(task_spec)
 }
@@ -689,9 +688,23 @@ fn build_cmd(
     cmd.args(["-display", "none"]);
     cmd.args(["-serial", "stdio"]);
 
-    cmd.args(["-smp", &task_spec.resources.cpus.to_string()]);
+    cmd.args([
+        "-smp",
+        &task_spec
+            .resources
+            .cpus
+            .millicores()?
+            .div_ceil(1000)
+            .to_string(),
+    ]);
 
-    cmd.args(["-m", &format!("{}M", &task_spec.resources.memory)]);
+    cmd.args([
+        "-m",
+        &format!(
+            "{}M",
+            &task_spec.resources.memory.bytes()?.div_ceil(1000 * 1000)
+        ),
+    ]);
 
     for entry in gpu {
         cmd.args(["-device", &format!("vfio-pci,rombar=0,host={}", entry)]);
