@@ -3,7 +3,7 @@ use backhand::{FilesystemWriter, NodeHeader};
 use bytesize::ByteSize;
 use log::{debug, info, trace};
 use std::fs;
-use std::io::{self, Seek, SeekFrom};
+use std::io::{self, Read, Seek, SeekFrom};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
@@ -12,6 +12,38 @@ use crate::builders::linux_vm::mbr::Mbr;
 use crate::builders::Step;
 
 use super::LinuxVMBuildContext;
+
+/// File reader which lazily opens file to avoid file descriptors exhaustion.
+///
+/// File will be opened only when `read()` is called and closed at the end of `read()`.
+struct LazyOpen {
+    path: PathBuf,
+    pos: SeekFrom,
+}
+
+impl LazyOpen {
+    /// Create new LazyReader.
+    pub fn new<P>(path: P) -> Self
+    where
+        P: AsRef<Path>,
+    {
+        Self {
+            path: path.as_ref().to_path_buf(),
+            pos: SeekFrom::Start(0),
+        }
+    }
+}
+
+impl Read for LazyOpen {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let mut file = fs::File::open(&self.path)?;
+        file.seek(self.pos)?;
+        let count = file.read(buf)?;
+        let current_pos = file.stream_position()?;
+        self.pos = SeekFrom::Start(current_pos);
+        Ok(count)
+    }
+}
 
 /// SquashFS handler.
 #[derive(Debug)]
@@ -80,7 +112,7 @@ impl<'a, 'b, 'c> SquashFs<'a, 'b, 'c> {
                 ))?;
                 Self::push_dir_recursively_inner(fs_writer, base, &entry.path())?;
             } else if file_type.is_file() {
-                let reader = fs::File::open(&entry_path)?;
+                let reader = LazyOpen::new(&entry_path);
                 trace!("creating file squashfs:/{}", relative_path.display());
                 fs_writer
                     .push_file(reader, relative_path, header)
@@ -199,5 +231,62 @@ impl Step<LinuxVMBuildContext> for WriteSquashFs {
         ctx.set("root-partition-number", Box::new(root_partition_number));
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use minilsof::LsofData;
+    use std::io::Write;
+
+    #[test]
+    fn test_lazy_open() {
+        // prepare test file
+        let tmp = tempdir::TempDir::new("").expect("create tmp dir");
+        let tmpfile_path = tmp.path().join("tmp");
+
+        let opened = || -> bool {
+            let path_str = tmpfile_path
+                .as_os_str()
+                .to_str()
+                .expect("utf-8 path")
+                .to_string();
+            LsofData::new()
+                .target_file_ls(path_str)
+                .is_some_and(|fds| fds.len() > 0)
+        };
+        let closed = || -> bool { !opened() };
+
+        let mut tmpfile = fs::File::create_new(&tmpfile_path).expect("create tmp");
+        assert!(opened());
+
+        tmpfile.write_all(b"1234").expect("write tmp");
+
+        drop(tmpfile);
+        assert!(closed());
+
+        // create lazy reader
+        let mut buf = [0u8; 2];
+        let mut lazy_reader = LazyOpen::new(&tmpfile_path);
+        // ensure there is no fd
+        assert!(closed());
+
+        // read first 2 bytes
+        let count = lazy_reader
+            .read(&mut buf)
+            .expect("read first time with lazy reader");
+        assert_eq!(count, 2);
+        assert_eq!(&buf, b"12");
+        // ensure there is no fd
+        assert!(closed());
+
+        // read last 2 bytes
+        let count = lazy_reader
+            .read(&mut buf)
+            .expect("read second time with lazy reader");
+        assert_eq!(count, 2);
+        assert_eq!(&buf, b"34");
+        assert!(closed());
     }
 }
