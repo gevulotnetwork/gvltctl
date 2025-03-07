@@ -73,3 +73,6 @@ vm-builder-v2 = [
 
 [patch.crates-io]
 gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs", rev = "9aad7a9cbea15e9007ff5b45a566212bdf853620" }
+
+[dev-dependencies]
+minilsof = "0.1"

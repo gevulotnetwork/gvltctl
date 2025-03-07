@@ -116,5 +116,3 @@ Options:
 ## Supported platforms
 
 `gvltctl` is supported on both Linux and MacOS (Windows is not tested, but probably also works).
-
-Building Linux VM (`gvltctl build`) is only supported on Linux right now.
