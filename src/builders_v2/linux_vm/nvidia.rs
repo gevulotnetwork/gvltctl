@@ -1,6 +1,6 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use bytesize::ByteSize;
-use log::{debug, info, trace, warn};
+use log::{debug, error, info, trace};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempdir::TempDir;
@@ -281,10 +281,8 @@ impl Step<LinuxVMBuildContext> for BuildDrivers {
 
         match kernel {
             Kernel::Precompiled { .. } => {
-                // TODO: should we return error in this case or not?
-
-                warn!("Installing NVIDIA drivers for precompiled kernel is not supported yet!");
-                warn!("Skipping installation.");
+                error!("Building NVIDIA drivers for precompiled kernel is not supported yet!");
+                bail!("cannot build NVIDIA drivers without kernel sources");
             }
             Kernel::Sources {
                 source_path,
