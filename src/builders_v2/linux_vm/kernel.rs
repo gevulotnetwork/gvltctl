@@ -100,7 +100,6 @@ impl Kernel {
         matches!(self, Self::Precompiled { .. })
     }
 
-    // TODO: use this function.
     // TODO: maybe use libgit instead of executable?
     /// Clone Linux kernel repository into `path`.
     fn clone(git_url: &str, version: &str, path: &Path) -> Result<()> {
