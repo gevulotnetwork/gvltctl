@@ -65,6 +65,7 @@ impl Cli {
             }
             Command::Sudo(command) => command.run(self.format).await,
             Command::Build(build_args) => build_args.run(self.format).await,
+            Command::LocalRun(run_args) => run_args.run(self.format).await,
         }
     }
 }
@@ -142,6 +143,9 @@ pub enum Command {
 
     /// Build a VM image from a container, rootfs directory, or Containerfile.
     Build(build::BuildArgs),
+
+    /// Run VM locally.
+    LocalRun(local_run::RunArgs),
 }
 
 /// Main entry point for the Gevulot Control CLI application.

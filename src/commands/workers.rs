@@ -106,7 +106,7 @@ async fn create_worker(
                 .creator(me)
                 .name(worker.metadata.name)
                 .description(worker.metadata.description)
-                .tags(worker.metadata.tags.into_iter().map(Into::into).collect())
+                .tags(worker.metadata.tags.into_iter().collect())
                 .labels(worker.metadata.labels.into_iter().map(Into::into).collect())
                 .cpus(worker.spec.cpus as u64)
                 .gpus(worker.spec.gpus as u64)
