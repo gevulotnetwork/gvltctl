@@ -181,8 +181,11 @@ pub struct UseImageFile;
 
 impl Step<LinuxVMBuildContext> for UseImageFile {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
-        let base_image_path = ctx.cache().join("base.img");
-        if !base_image_path.exists() {
+        let crc_instance = crc::Crc::<u64>::new(&crc::CRC_64_ECMA_182);
+        let checksum = format!("{:x}", crc_instance.checksum(BASE_IMAGE));
+        debug!("base image checksum: {}", &checksum);
+        let base_image_path = ctx.cache().join(format!("{}.base.img", checksum));
+        if !base_image_path.is_file() {
             info!("creating base image file: {}", base_image_path.display());
             let mut file = fs::File::create_new(&base_image_path)
                 .context("failed to create base image file")?;

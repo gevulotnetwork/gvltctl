@@ -1,11 +1,14 @@
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use log::info;
 use mia_installer::{runtime_config, RuntimeConfig};
+use std::fs;
 use std::path::PathBuf;
 
 use crate::builders::Step;
 
 use super::LinuxVMBuildContext;
+
+const MIA_PLATFORM: &str = "x86_64-unknown-linux-gnu";
 
 /// Install MIA into root filesystem.
 ///
@@ -109,8 +112,49 @@ impl Step<LinuxVMBuildContext> for InstallMia {
         };
 
         let mut install_config = mia_installer::InstallConfig::default();
-        install_config.mia_version = self.version.to_string();
-        install_config.mia_platform = "x86_64-unknown-linux-gnu".to_string();
+
+        let version = if self.version.starts_with("file:") {
+            self.version.clone()
+        } else {
+            // Resolve 'latest' to a concrete version
+            let version = if &self.version == "latest" {
+                mia_installer::sync::latest_version()
+                    .context("failed to detect latest MIA version")?
+            } else {
+                self.version.clone()
+            };
+
+            // MIA executable is cached in CACHE/mia/<platform>/mia-<version>
+            let cache_dir = ctx.cache().join("mia").join(MIA_PLATFORM);
+            if !cache_dir.is_dir() {
+                fs::create_dir_all(&cache_dir).context("failed to create MIA cache dir")?;
+            }
+            let cache_entry = cache_dir.join(format!("mia-{}", &version));
+
+            // Ensure MIA is cached
+            if !cache_entry.exists() {
+                info!("downloading MIA ({})", &version);
+                mia_installer::sync::download(&version, MIA_PLATFORM, &cache_entry)
+                    .context("failed to download MIA (latest)")?;
+            } else {
+                info!("using cached MIA ({})", &version);
+            }
+
+            // Install MIA from local file in cache
+            format!(
+                "file:{}",
+                cache_entry
+                    .as_os_str()
+                    .to_str()
+                    .ok_or(anyhow!("failed to handle MIA cache path: not UTF-8"))?
+            )
+        };
+
+        // At this point `version` will always point to a local file: user-provided or cached
+        debug_assert!(version.starts_with("file:"));
+
+        install_config.mia_version = version;
+        install_config.mia_platform = MIA_PLATFORM.to_string();
 
         let rootfs = ctx.get::<PathBuf>("root-fs").expect("root-fs");
 
@@ -121,7 +165,6 @@ impl Step<LinuxVMBuildContext> for InstallMia {
 
         install_config.rt_config = Some(rt_config);
 
-        // TODO: add 'fetch' option to utilize cache and avoid re-downloading
         mia_installer::install(&install_config).context("failed to install MIA")?;
 
         Ok(())

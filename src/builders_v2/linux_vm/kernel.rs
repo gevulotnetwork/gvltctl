@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use base64::Engine;
 use bytesize::ByteSize;
 use log::{debug, info, trace};
 use std::ffi::OsStr;
@@ -43,6 +44,9 @@ pub enum Kernel {
 
         /// Size of the kernel file.
         size: u64,
+
+        /// Kernel release string (e.g. 6.12.0).
+        kernel_release: String,
     },
 }
 
@@ -66,10 +70,19 @@ impl Kernel {
     }
 
     /// Return path to sources if some.
+    #[allow(unused)]
     pub fn source_path(&self) -> Option<&Path> {
         match self {
             Self::Precompiled { .. } => None,
             Self::Sources { source_path, .. } => Some(source_path.as_path()),
+        }
+    }
+
+    /// Kernel release string if some.
+    pub fn kernel_release(&self) -> Option<&str> {
+        match self {
+            Kernel::Precompiled { .. } => None,
+            Kernel::Sources { kernel_release, .. } => Some(kernel_release),
         }
     }
 
@@ -82,16 +95,14 @@ impl Kernel {
     }
 
     /// Whether kernel was precompiled or not.
+    #[allow(unused)]
     pub fn is_precompiled(&self) -> bool {
         matches!(self, Self::Precompiled { .. })
     }
 
-    // TODO: use this function.
     // TODO: maybe use libgit instead of executable?
-    /// Clone Linux kernel repository into `path/version` returning path to resulting directory.
-    #[allow(unused)]
-    fn clone(git_url: &str, version: &str, path: &Path) -> Result<PathBuf> {
-        let target_path = path.join(version);
+    /// Clone Linux kernel repository into `path`.
+    fn clone(git_url: &str, version: &str, path: &Path) -> Result<()> {
         let mut command = vec![
             OsStr::new("git"),
             OsStr::new("clone"),
@@ -103,145 +114,120 @@ impl Kernel {
             command.push(OsStr::new(version));
         }
         command.push(OsStr::new(git_url));
-        command.push(target_path.as_os_str());
+        command.push(path.as_os_str());
         run_command(&command).context("failed to clone kernel repository")?;
-        Ok(target_path)
+        Ok(())
+    }
+
+    /// Configure kernel.
+    ///
+    /// Assumes that CWD is kernel directory.
+    fn configure() -> Result<()> {
+        run_command(&["make", "x86_64_defconfig"]).context("Failed to configure kernel")?;
+        Self::configure_squashfs()?;
+        Ok(())
+    }
+
+    /// Configure SquashFS support in kernel.
+    ///
+    /// Assumes that CWD is kernel directory.
+    fn configure_squashfs() -> Result<()> {
+        // TODO: ensure stability of this configuration.
+        // Kernel options can be removed/renamed. This configuration is used for v6.12,
+        // but it may not work with other versions.
+
+        const ENABLE: &[&str] = &[
+            "CONFIG_SQUASHFS",
+            "CONFIG_SQUASHFS_FILE_DIRECT",
+            "CONFIG_SQUASHFS_DECOMP_SINGLE",
+            "CONFIG_SQUASHFS_DECOMP_MULTI",
+            "CONFIG_SQUASHFS_DECOMP_MULTI_PERCPU",
+            "CONFIG_SQUASHFS_CHOICE_DECOMP_BY_MOUNT",
+            "CONFIG_SQUASHFS_MOUNT_DECOMP_THREADS",
+            "CONFIG_SQUASHFS_XATTR",
+            "CONFIG_SQUASHFS_ZLIB",
+            "CONFIG_SQUASHFS_LZ4",
+            "CONFIG_SQUASHFS_LZO",
+            "CONFIG_SQUASHFS_XZ",
+            "CONFIG_SQUASHFS_ZSTD",
+            "CONFIG_SQUASHFS_4K_DEVBLK_SIZE",
+        ];
+
+        const DISABLE: &[&str] = &["CONFIG_SQUASHFS_FILE_CACHE", "CONFIG_SQUASHFS_EMBEDDED"];
+
+        const SET_VAL: &[(&str, &str)] = &[("3", "CONFIG_SQUASHFS_FRAGMENT_CACHE_SIZE")];
+
+        for flag in ENABLE {
+            run_command(&["scripts/config", "--enable", flag])
+                .context(format!("failed to enable {} flag to kernel config", flag))?;
+        }
+
+        for flag in DISABLE {
+            run_command(&["scripts/config", "--disable", flag])
+                .context(format!("failed to disable {} flag to kernel config", flag))?;
+        }
+
+        for (val, flag) in SET_VAL {
+            run_command(&["scripts/config", "--set-val", val, flag])
+                .context(format!("failed to set {} value to kernel config", flag))?;
+        }
+
+        Ok(())
     }
 
     /// Build kernel from sources.
-    pub fn build(git_url: &str, version: &str) -> Result<Self> {
+    pub fn build(git_url: &str, version: &str, kernel_dir: &Path) -> Result<Self> {
         // TODO: check required tools are available: git, make, gcc
-        let home_dir = std::env::var("HOME").context("Failed to get HOME environment variable")?;
-        let kernel_dir = format!("{}/.linux-builds/{}", home_dir, version);
-        let bzimage_path = format!("{}/arch/x86/boot/bzImage", kernel_dir);
 
-        // Check if the bzImage already exists
-        if Path::new(&bzimage_path).exists() {
-            debug!("Kernel bzImage already exists, skipping build");
-        } else {
-            // Clone the specific version from the remote repository
+        Self::clone(git_url, version, kernel_dir)?;
 
-            // Check if the kernel directory already exists
-            if Path::new(&kernel_dir).exists() {
-                // If it exists, do a git pull
-                debug!("Kernel directory already exists");
-            } else {
-                debug!("Clonings kernel sources");
-                // If it doesn't exist, clone the repository
-                let clone_args = if version == "latest" {
-                    vec!["git", "clone", "--depth", "1", git_url, &kernel_dir]
-                } else {
-                    vec![
-                        "git",
-                        "clone",
-                        "--depth",
-                        "1",
-                        "--branch",
-                        version,
-                        git_url,
-                        &kernel_dir,
-                    ]
-                };
-                run_command(&clone_args).context("Failed to clone kernel repository")?;
-            }
+        debug!("Building sources");
+        let current_dir = std::env::current_dir().context("Failed to get current directory")?;
+        std::env::set_current_dir(&kernel_dir).context("Failed to change to kernel directory")?;
 
-            debug!("Building sources");
-            let current_dir = std::env::current_dir().context("Failed to get current directory")?;
-            std::env::set_current_dir(&kernel_dir)
-                .context("Failed to change to kernel directory")?;
+        Self::configure()?;
 
-            // Configure the kernel
-            run_command(&["make", "x86_64_defconfig"]).context("Failed to configure kernel")?;
+        // Build the kernel
+        run_command(["make", &format!("-j{}", num_cpus::get())])
+            .context("Failed to build kernel")?;
 
-            // SQUASHFS support
-            run_command(&["scripts/config", "--enable", "CONFIG_SQUASHFS"])
-                .context("Failed to enable CONFIG_SQUASHFS flag to kernel config ")?;
+        std::env::set_current_dir(current_dir)
+            .context("Failed to change back to original directory")?;
 
-            run_command(&["scripts/config", "--disable", "CONFIG_SQUASHFS_FILE_CACHE"])
-                .context("Failed to disable CONFIG_SQUASHFS_FILE_CACHE flag to kernel config ")?;
+        Self::use_existing(git_url, version, kernel_dir)
+    }
 
-            run_command(&["scripts/config", "--enable", "CONFIG_SQUASHFS_FILE_DIRECT"])
-                .context("Failed to enable CONFIG_SQUASHFS_FILE_DIRECT flag to kernel config")?;
+    /// Use existing kernel compiled from sources.
+    pub fn use_existing(git_url: &str, version: &str, kernel_dir: &Path) -> Result<Self> {
+        let current_dir = std::env::current_dir().context("Failed to get current directory")?;
+        std::env::set_current_dir(&kernel_dir).context("Failed to change to kernel directory")?;
 
-            run_command(&[
-                "scripts/config",
-                "--enable",
-                "CONFIG_SQUASHFS_DECOMP_SINGLE",
-            ])
-            .context("Failed to enable CONFIG_SQUASHFS_DECOMP_SINGLE flag to kernel config")?;
+        let kernel_release = run_command(["make", "-s", "kernelrelease"])
+            .context("failed to get kernel release string")?
+            .0
+            .trim()
+            .to_string();
 
-            run_command(&["scripts/config", "--enable", "CONFIG_SQUASHFS_DECOMP_MULTI"])
-                .context("Failed to enable CONFIG_SQUASHFS_DECOMP_MULTI flag to kernel config")?;
+        let bzimage_path = kernel_dir.join(
+            run_command(["make", "-s", "image_name"])
+                .context("failed to get kernel image name")?
+                .0
+                .trim(),
+        );
+        debug!("kernel file: {}", bzimage_path.display());
 
-            run_command(&[
-                "scripts/config",
-                "--enable",
-                "CONFIG_SQUASHFS_DECOMP_MULTI_PERCPU",
-            ])
-            .context(
-                "Failed to enable CONFIG_SQUASHFS_DECOMP_MULTI_PERCPU flag to kernel config",
-            )?;
-
-            run_command(&[
-                "scripts/config",
-                "--enable",
-                "CONFIG_SQUASHFS_CHOICE_DECOMP_BY_MOUNT",
-            ])
-            .context(
-                "Failed to enable CONFIG_SQUASHFS_CHOICE_DECOMP_BY_MOUNT flag to kernel config",
-            )?;
-            run_command(&[
-                "scripts/config",
-                "--enable",
-                "CONFIG_SQUASHFS_MOUNT_DECOMP_THREADS",
-            ])
-            .context(
-                "Failed to enable CONFIG_SQUASHFS_MOUNT_DECOMP_THREADS flag to kernel config",
-            )?;
-            run_command(&["scripts/config", "--enable", "CONFIG_SQUASHFS_XATTR"])
-                .context("Failed to enable CONFIG_SQUASHFS_XATTR flag to kernel config")?;
-            run_command(&["scripts/config", "--enable", "CONFIG_SQUASHFS_ZLIB"])
-                .context("Failed to enable CONFIG_SQUASHFS_ZLIB flag to kernel config")?;
-            run_command(&["scripts/config", "--enable", "CONFIG_SQUASHFS_LZ4"])
-                .context("Failed to enable CONFIG_SQUASHFS_LZ4 flag to kernel config")?;
-            run_command(&["scripts/config", "--enable", "CONFIG_SQUASHFS_LZO"])
-                .context("Failed to enable CONFIG_SQUASHFS_LZO flag to kernel config")?;
-            run_command(&["scripts/config", "--enable", "CONFIG_SQUASHFS_XZ"])
-                .context("Failed to enable CONFIG_SQUASHFS_XZ flag to kernel config")?;
-            run_command(&["scripts/config", "--enable", "CONFIG_SQUASHFS_ZSTD"])
-                .context("Failed to enable CONFIG_SQUASHFS_ZSTD flag to kernel config")?;
-            run_command(&[
-                "scripts/config",
-                "--enable",
-                "CONFIG_SQUASHFS_4K_DEVBLK_SIZE",
-            ])
-            .context("Failed to enable CONFIG_SQUASHFS_4K_DEVBLK_SIZE flag to kernel config")?;
-            run_command(&[
-                "scripts/config",
-                "--set-val",
-                "3",
-                "CONFIG_SQUASHFS_FRAGMENT_CACHE_SIZE",
-            ])
-            .context("Failed to set CONFIG_SQUASHFS_FRAGMENT_CACHE_SIZE value to kernel config")?;
-            run_command(&["scripts/config", "--disable", "CONFIG_SQUASHFS_EMBEDDED"])
-                .context("Failed to disable CONFIG_SQUASHFS_EMBEDDED flag to kernel config ")?;
-
-            // Build the kernel
-            run_command(&["make", &format!("-j{}", num_cpus::get())])
-                .context("Failed to build kernel")?;
-
-            std::env::set_current_dir(current_dir)
-                .context("Failed to change back to original directory")?;
-        }
+        std::env::set_current_dir(current_dir)
+            .context("Failed to change back to original directory")?;
 
         let metadata = fs::metadata(&bzimage_path).context("get kernel file metadata")?;
 
         Ok(Self::Sources {
             git_url: git_url.to_string(),
             version: version.to_string(),
-            source_path: PathBuf::from(&kernel_dir),
+            source_path: kernel_dir.to_path_buf(),
             path: PathBuf::from(&bzimage_path),
             size: metadata.len(),
+            kernel_release,
         })
     }
 
@@ -274,11 +260,30 @@ impl Build {
 impl Step<LinuxVMBuildContext> for Build {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         info!("building Linux kernel");
-        let kernel = Kernel::build(&self.repository_url, &self.version)
-            .context("failed to build Linux kernel")?;
+        let build_dir = ctx
+            .cache()
+            .join("linux-build")
+            .join(base64::prelude::BASE64_URL_SAFE_NO_PAD.encode(&self.repository_url))
+            .join(&self.version);
+        debug!("kernel build directory: {}", build_dir.display());
+
+        // Check if the cache entry (kernel directory) already exists
+        let kernel = if build_dir.is_dir() {
+            debug!("using cached kernel");
+            Kernel::use_existing(&self.repository_url, &self.version, &build_dir)
+                .context("failed to use kernel from cache")?
+        } else {
+            debug!("Clonings kernel sources");
+            fs::create_dir_all(&build_dir).context("failed to create kernel directory")?;
+            Kernel::build(&self.repository_url, &self.version, &build_dir)
+                .context("failed to build Linux kernel")?
+        };
+
         info!(
             "kernel ready: {} ({})",
-            &kernel,
+            kernel
+                .kernel_release()
+                .expect("kernel is expected to be compiled from sources"),
             ByteSize::b(kernel.size()).to_string_as(true)
         );
         ctx.set("kernel", Box::new(kernel));

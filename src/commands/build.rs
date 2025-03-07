@@ -182,6 +182,15 @@ pub struct BuildArgs {
     #[arg(long)]
     pub from_scratch: bool,
 
+    /// Cache directory.
+    ///
+    /// Usually defaults to:
+    /// - '$HOME/.cache/gvltctl' on Linux
+    /// - '$HOME/Library/Caches/gevulot.gvltctl' on MacOS
+    #[cfg(feature = "vm-builder-v2")]
+    #[arg(long, value_name = "DIR", value_hint = ValueHint::FilePath, verbatim_doc_comment)]
+    pub cache_dir: Option<PathBuf>,
+
     /// Generate only base VM image.
     ///
     /// If this option is enabled, only base VM image will be generated.
@@ -398,6 +407,8 @@ impl TryFrom<&BuildArgs> for linux_vm::LinuxVMBuildContext {
             }
         };
 
+        let cache_dir = opts.cache_dir.clone();
+
         let gen_base_img = opts.generate_base_image;
         let from_scratch = gen_base_img || opts.from_scratch;
         let mbr_file = opts.mbr_file.clone();
@@ -412,6 +423,7 @@ impl TryFrom<&BuildArgs> for linux_vm::LinuxVMBuildContext {
             from_scratch,
             root_fs_opts,
             mbr_file,
+            cache_dir,
             rw_root,
             gen_base_img,
         };

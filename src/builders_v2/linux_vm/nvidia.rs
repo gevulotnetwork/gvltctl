@@ -1,6 +1,6 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{bail, Context, Result};
 use bytesize::ByteSize;
-use log::{debug, info, trace, warn};
+use log::{debug, error, info, trace};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempdir::TempDir;
@@ -14,12 +14,6 @@ use super::LinuxVMBuildContext;
 
 #[derive(Error, Debug)]
 pub enum NvidiaError {
-    #[error("Failed to read kernel release file at {path}")]
-    KernelReleaseRead {
-        path: PathBuf,
-        source: std::io::Error,
-    },
-
     #[error("Failed to copy kernel source: {source}")]
     KernelSourceCopy { source: std::io::Error },
 
@@ -36,38 +30,50 @@ pub enum NvidiaError {
     Io(#[from] std::io::Error), // Fallback error for generic I/O errors
 }
 
+// hardcoded for now - we always build this version of driver
+/// Version of the installed driver (constant because we only use this version now).
+const DRIVER_VERSION: &str = "550.120";
+
 /// Represents NVIDIA dumped NVIDIA drivers.
 #[derive(Debug)]
 pub struct NvidiaDriversFs {
-    target_dir: TempDir,
+    target_dir: PathBuf,
     kernel_release: String,
 }
 
 impl NvidiaDriversFs {
+    /// Use existing (already built) NVIDIA drivers.
+    pub fn use_existing(target_dir: PathBuf, kernel_release: String) -> Self {
+        Self {
+            target_dir,
+            kernel_release,
+        }
+    }
+
     /// Path to drivers directory.
     pub fn path(&self) -> &Path {
-        self.target_dir.path()
+        self.target_dir.as_path()
+    }
+
+    /// Kernel release string.
+    pub fn kernel_release(&self) -> &str {
+        self.kernel_release.as_str()
     }
 
     /// Build and dump drivers.
-    pub fn build<P: AsRef<Path>>(kernel_source_dir: P) -> Result<Self> {
+    pub fn build<P: AsRef<Path>>(
+        kernel_source_dir: P,
+        kernel_release: String,
+        target_dir: PathBuf,
+    ) -> Result<Self> {
         // TIP: We could do extra initial checks here:
         // - Checking for kernel source access permissions.
         // - Checking for dangling symlinks that will not be accessible insider container volume mount.
         // - Checking for host requierements.
 
-        // We need to know kernel name in order to identify location of driver files.
-        debug!("Extracting kernel version.");
-        let kernel_release = read_kernel_release(&kernel_source_dir)?;
-        info!("Detected kernel: '{}'.", kernel_release);
-
         // Copy kernel sources, as we do NOT want them to be directly modified by NVIDIA installer.
         debug!("Copying kernel source.");
         let kernel_source_copy = copy_kernel_source(&kernel_source_dir)?;
-
-        // Drivers tree will be dumped to temporary directory.
-        debug!("Preparing target directory.");
-        let target_dir = TempDir::new("linux-vm-nvidia-drivers").map_err(NvidiaError::Io)?;
 
         // Run container for compiling and dumping NVIDIA drivers.
         // NOTE: We use it to reduce number of host dependencies **only**, not for isolation.
@@ -76,13 +82,13 @@ impl NvidiaDriversFs {
 
         return Ok(Self {
             target_dir,
-            kernel_release: kernel_release.to_string(),
+            kernel_release,
         });
     }
 
     /// Get size of all files to install.
     pub fn size(&self) -> Result<u64> {
-        fs_extra::dir::get_size(self.target_dir.path()).map_err(Into::into)
+        fs_extra::dir::get_size(self.path()).map_err(Into::into)
     }
 
     /// Install drivers returning list of names of installed drivers.
@@ -127,23 +133,6 @@ impl NvidiaDriversFs {
     }
 }
 
-fn read_kernel_release<P: AsRef<Path>>(kernel_source_dir: P) -> Result<String, NvidiaError> {
-    let kernel_release_path = kernel_source_dir
-        .as_ref()
-        .join("include/config/kernel.release");
-    let kernel_release_content = fs::read_to_string(kernel_release_path.clone()).map_err(|e| {
-        NvidiaError::KernelReleaseRead {
-            path: kernel_release_path,
-            source: e,
-        }
-    })?;
-    let kernel_release = kernel_release_content.trim().to_string();
-
-    info!("Detected kernel: '{}'.", kernel_release);
-
-    Ok(kernel_release)
-}
-
 fn copy_kernel_source<P: AsRef<Path>>(kernel_source_dir: P) -> Result<TempDir, NvidiaError> {
     let kernel_source_copy = TempDir::new("kernel-source-copy").map_err(NvidiaError::Io)?;
     copy_dir_all(kernel_source_dir, kernel_source_copy.as_ref())
@@ -154,11 +143,11 @@ fn copy_kernel_source<P: AsRef<Path>>(kernel_source_dir: P) -> Result<TempDir, N
 
 fn run_driver_container(
     kernel_source_copy: &TempDir,
-    target_dir: &TempDir,
+    target_dir: &Path,
 ) -> Result<(), NvidiaError> {
     let container_image = "docker.io/koxu1996/dump-custom-nvidia-driver:0.3.0"; // TODO: Replace with an official Gmulot image.
     let kernel_source_copy_str = path_to_str(kernel_source_copy.path())?;
-    let target_dir_str = path_to_str(target_dir.path())?;
+    let target_dir_str = path_to_str(target_dir)?;
 
     run_command(&[
         "podman",
@@ -190,14 +179,13 @@ fn prepare_vm_modules_dir<P: AsRef<Path>>(
 }
 
 fn copy_nvidia_driver<P: AsRef<Path>>(
-    target_dir: &TempDir,
+    target_dir: &Path,
     vm_root_path: P,
     kernel_release: &str,
     driver_name: &str,
 ) -> Result<(), NvidiaError> {
     let driver_name = format!("{}.ko", driver_name);
     let source_path = target_dir
-        .path()
         .join("usr/lib/modules")
         .join(kernel_release)
         .join("video")
@@ -214,11 +202,10 @@ fn copy_nvidia_driver<P: AsRef<Path>>(
 }
 
 fn copy_driver_libraries<P: AsRef<Path>>(
-    target_dir: &TempDir,
+    target_dir: &Path,
     vm_root_path: P,
 ) -> Result<(), NvidiaError> {
     let source_path = target_dir
-        .path()
         .join("usr/lib/x86_64-linux-gnu") // CAUTION: This is okay; it should NOT be the `kernel_release`.
         .join("libcuda.so.550.120"); // TODO: Dynamically find the filename.
     let target_path = vm_root_path.as_ref().join("lib").join("libcuda.so.1");
@@ -292,29 +279,57 @@ impl Step<LinuxVMBuildContext> for BuildDrivers {
         info!("building NVIDIA drivers");
         let kernel = ctx.get::<Kernel>("kernel").expect("kernel");
 
-        // TODO: should we return error in this case or not?
-        if kernel.is_precompiled() {
-            warn!("Installing NVIDIA drivers for precompiled kernel is not supported yet!");
-            warn!("Skipping installation.");
-            return Ok(());
+        match kernel {
+            Kernel::Precompiled { .. } => {
+                error!("Building NVIDIA drivers for precompiled kernel is not supported yet!");
+                bail!("cannot build NVIDIA drivers without kernel sources");
+            }
+            Kernel::Sources {
+                source_path,
+                kernel_release,
+                ..
+            } => {
+                let target_dir = ctx
+                    .cache()
+                    .join("nvidia")
+                    .join(DRIVER_VERSION)
+                    .join(&kernel_release);
+
+                let nvidia_drivers = if target_dir.is_dir() {
+                    // If cache entry (directory) already exists, use cached drivers
+                    let nvidia_drivers =
+                        NvidiaDriversFs::use_existing(target_dir, kernel_release.clone());
+                    info!(
+                        "using cached NVIDIA drivers (kernel release: {}, driver version: {}) - {}",
+                        nvidia_drivers.kernel_release(),
+                        DRIVER_VERSION,
+                        ByteSize::b(nvidia_drivers.size()?)
+                    );
+                    debug!("drivers cache path: {}", nvidia_drivers.path().display());
+                    nvidia_drivers
+                } else {
+                    fs::create_dir_all(&target_dir).map_err(NvidiaError::Io)?;
+
+                    let nvidia_drivers =
+                        NvidiaDriversFs::build(source_path, kernel_release.clone(), target_dir)
+                            .context("failed to build NVIDIA drivers")?;
+                    trace!(
+                        "NVIDIA drivers dumped to {}",
+                        nvidia_drivers.path().display()
+                    );
+
+                    info!(
+                        "NVIDIA drivers built (kernel release: {}, driver version: {}) - {}",
+                        nvidia_drivers.kernel_release(),
+                        DRIVER_VERSION,
+                        ByteSize::b(nvidia_drivers.size()?)
+                    );
+                    nvidia_drivers
+                };
+
+                ctx.set("nvidia-drivers", Box::new(nvidia_drivers));
+            }
         }
-        let kernel_sources = kernel
-            .source_path()
-            .ok_or(anyhow!("failed to get path to kernel sources"))?;
-
-        let nvidia_drivers =
-            NvidiaDriversFs::build(kernel_sources).context("failed to build NVIDIA drivers")?;
-        trace!(
-            "NVIDIA drivers dumped to {}",
-            nvidia_drivers.path().display()
-        );
-
-        debug!(
-            "NVIDIA drivers built: {} ({})",
-            nvidia_drivers.path().display(),
-            ByteSize::b(nvidia_drivers.size()?)
-        );
-        ctx.set("nvidia-drivers", Box::new(nvidia_drivers));
 
         Ok(())
     }
