@@ -56,6 +56,7 @@ pub struct ChainArgs {
 }
 
 pub mod build;
+pub mod local_run;
 pub mod pins;
 pub mod sudo;
 pub mod tasks;

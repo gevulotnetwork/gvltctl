@@ -77,13 +77,19 @@ To build VM image from scratch without using base image (see `--from-scratch` op
 
 - `syslinux`
 
+#### `gvltctl local-run`
+
+`gvltctl local-run` needs additional dependencies:
+
+- `qemu-system-x86_64`
+
 ## Usage
 
 ```plain
 $ gvltctl --help
 Gevulot Control CLI
 
-Usage: gvltctl <COMMAND>
+Usage: gvltctl [OPTIONS] <COMMAND>
 
 Commands:
   worker               Commands related to workers
@@ -97,11 +103,14 @@ Commands:
   generate-completion  Generate shell completion scripts
   sudo                 Perform administrative operations with sudo privileges
   build                Build a VM image from a container, rootfs directory, or Containerfile
+  local-run            Run VM locally
   help                 Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help     Print help
-  -V, --version  Print version
+  -F, --format <FORMAT>  Sets the output format [env: GEVULOT_FORMAT=] [default: yaml] [possible values: yaml, json, prettyjson, toml]
+  -h, --help             Print help
+  -V, --version          Print version
+
 ```
 
 ## Supported platforms
