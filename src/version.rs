@@ -9,62 +9,32 @@ shadow_rs::shadow!(build_info);
 fn get_gevulot_rs_version(metadata: &Metadata) -> Option<String> {
     const GEVULOT_RS_NAME: &str = "gevulot-rs";
     let gvltctl = metadata.root_package()?;
-    let gevulot_rs_dep = gvltctl
+    let gevulot_rs_version_req = &gvltctl
         .dependencies
         .iter()
-        .find(|dep| dep.name == GEVULOT_RS_NAME)?;
+        .find(|dep| dep.name == GEVULOT_RS_NAME)?
+        .req;
 
-    if let Some(path) = gevulot_rs_dep.path.as_ref() {
-        Some(format!(
-            "{} ({})",
-            metadata
-                .packages
-                .iter()
-                .find(|package| {
-                    package.name == GEVULOT_RS_NAME && package.id.repr.starts_with("path")
-                })?
-                .version,
-            path.as_str()
-        ))
-    } else if gevulot_rs_dep
+    let gevulot_rs_package = metadata
+        .packages
+        .iter()
+        .filter(|package| package.name == GEVULOT_RS_NAME)
+        .find(|package| gevulot_rs_version_req.matches(&package.version))?;
+
+    let version = if gevulot_rs_package
         .source
         .as_ref()
-        .is_some_and(|src| src.starts_with("git"))
+        .is_some_and(cargo_metadata::Source::is_crates_io)
     {
-        metadata.packages.iter().find_map(|package| {
-            if package.name == GEVULOT_RS_NAME {
-                package
-                    .id
-                    .repr
-                    .strip_prefix("git+")?
-                    .split('#')
-                    .collect::<Vec<_>>()
-                    .first()
-                    .map(|id| format!("{} ({})", package.version, id))
-            } else {
-                None
-            }
-        })
-    } else if gevulot_rs_dep
-        .source
-        .as_ref()
-        .is_some_and(|src| src.starts_with("registry"))
-    {
-        metadata.packages.iter().find_map(|package| {
-            if package.name == GEVULOT_RS_NAME
-                && package
-                    .source
-                    .as_ref()
-                    .is_some_and(cargo_metadata::Source::is_crates_io)
-            {
-                Some(package.version.to_string())
-            } else {
-                None
-            }
-        })
+        gevulot_rs_package.version.to_string()
     } else {
-        return None;
-    }
+        format!(
+            "{} ({})",
+            &gevulot_rs_package.version, &gevulot_rs_package.id.repr
+        )
+    };
+
+    Some(version)
 }
 
 /// Get long version of the tool.
