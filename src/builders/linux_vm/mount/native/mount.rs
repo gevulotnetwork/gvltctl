@@ -30,7 +30,7 @@ impl MountHandler for NativeMount {
         let mountpoint =
             TempDir::new("mount").context("failed to create temp directory for mounting")?;
 
-        run_command(&[
+        run_command([
             OsStr::new("mount"),
             // Partition offset (loop device is setting up and detaching automatically)
             OsStr::new("--options"),
@@ -44,7 +44,7 @@ impl MountHandler for NativeMount {
 
     fn unmount_no_drop(&self) -> Result<()> {
         debug!("unmounting {}", &self);
-        run_command(&[OsStr::new("umount"), self.mountpoint.path().as_os_str()])?;
+        run_command([OsStr::new("umount"), self.mountpoint.path().as_os_str()])?;
         Ok(())
     }
 }
@@ -80,7 +80,7 @@ impl Step<LinuxVMBuildContext> for MountFileSystem {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         info!("mounting filesystem");
         let image_file = ctx.get::<ImageFile>("image-file").expect("image-file");
-        let partition_idx = *ctx.get::<usize>(&self.0).expect(&self.0);
+        let partition_idx = *ctx.get::<usize>(self.0).expect(self.0);
 
         let mbr_adapter = Mbr::read_from(image_file.path())?;
         let (offset, _) = mbr_adapter.partition_limits(partition_idx)?;

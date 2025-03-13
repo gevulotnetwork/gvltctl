@@ -57,9 +57,9 @@ impl<'ctx, Ctx> Pipeline<'ctx, Ctx> {
     }
 
     /// Run pipeline.
-    pub fn run(mut self) -> Result<()> {
+    pub fn run(self) -> Result<()> {
         for mut step in self.steps {
-            step.run(&mut self.ctx)?;
+            step.run(self.ctx)?;
         }
         Ok(())
     }
@@ -84,7 +84,7 @@ impl Context {
     where
         T: 'static,
     {
-        self.inner.get(key).map(|t| t.downcast_ref::<T>()).flatten()
+        self.inner.get(key).and_then(|t| t.downcast_ref::<T>())
     }
 
     /// Get mutable reference to value by key. `T` is a downcast type of value.
@@ -93,10 +93,7 @@ impl Context {
     where
         T: 'static,
     {
-        self.inner
-            .get_mut(key)
-            .map(|t| t.downcast_mut::<T>())
-            .flatten()
+        self.inner.get_mut(key).and_then(|t| t.downcast_mut::<T>())
     }
 
     /// Pop value from context by key. `T` is a downcast type of value.
@@ -105,10 +102,7 @@ impl Context {
     where
         T: 'static,
     {
-        self.inner
-            .remove(key)
-            .map(|t| t.downcast::<T>().ok())
-            .flatten()
+        self.inner.remove(key).and_then(|t| t.downcast::<T>().ok())
     }
 
     /// Set value for the key.
@@ -135,7 +129,7 @@ mod tests {
     impl Step<String> for Step2 {
         fn run(&mut self, ctx: &mut String) -> Result<()> {
             ctx.contains("step1")
-                .then(|| {})
+                .then_some(())
                 .ok_or(anyhow::anyhow!("step2 failed"))
         }
     }

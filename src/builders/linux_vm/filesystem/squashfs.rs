@@ -218,7 +218,7 @@ impl Step<LinuxVMBuildContext> for WriteSquashFs {
             .context("failed to seek disk image file")?;
 
         let mut reader =
-            fs::File::open(&squashfs_image).context("failed to open SquashFS image file")?;
+            fs::File::open(squashfs_image).context("failed to open SquashFS image file")?;
 
         let written =
             io::copy(&mut reader, &mut writer).context("failed to write SquashFS to disk image")?;
@@ -254,7 +254,7 @@ mod tests {
                 .to_string();
             LsofData::new()
                 .target_file_ls(path_str)
-                .is_some_and(|fds| fds.len() > 0)
+                .is_some_and(|fds| !fds.is_empty())
         };
         let closed = || -> bool { !opened() };
 

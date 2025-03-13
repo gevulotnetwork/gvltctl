@@ -68,7 +68,7 @@ impl ContainerImage {
         let config_json = manifest_json
             .as_array()
             .ok_or(anyhow!("invalid image manifest"))?
-            .get(0)
+            .first()
             .ok_or(anyhow!("invalid image manifest"))?
             .as_object()
             .ok_or(anyhow!("invalid image manifest"))?
@@ -172,7 +172,7 @@ impl Step<LinuxVMBuildContext> for ExportFilesystem {
         info!("exporting filesystem from container");
         debug!("{} -> {}", &container.id, rootfs.display());
         container
-            .export(&rootfs)
+            .export(rootfs)
             .context("failed to export container filesystem")?;
 
         Ok(())

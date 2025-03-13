@@ -24,16 +24,13 @@ pub fn mbr_bin_path() -> Option<PathBuf> {
         "/usr/lib/extlinux/bios/mbr.bin",
         "/usr/lib/syslinux/bios/mbr.bin",
     ];
-    CANDIDATES
-        .into_iter()
-        .map(PathBuf::from)
-        .find_map(|candidate| {
-            if candidate.exists() {
-                return Some(candidate);
-            } else {
-                return None;
-            }
-        })
+    CANDIDATES.iter().map(PathBuf::from).find_map(|candidate| {
+        if candidate.exists() {
+            Some(candidate)
+        } else {
+            None
+        }
+    })
 }
 
 /// Install SYSLINUX through CLI.
@@ -69,7 +66,7 @@ impl Step<LinuxVMBuildContext> for Install {
             .create_dir("syslinux")
             .context("failed to create SYSLINUX config directory")?;
 
-        run_command(&[
+        run_command([
             OsStr::new("syslinux"),
             OsStr::new("--directory"),
             OsStr::new("/boot/syslinux"),

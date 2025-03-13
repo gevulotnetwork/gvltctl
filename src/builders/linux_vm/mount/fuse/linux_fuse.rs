@@ -43,7 +43,7 @@ impl MountHandler for FuseMount {
     }
 
     fn unmount_no_drop(&self) -> Result<()> {
-        run_command(&[
+        run_command([
             OsStr::new("umount"),
             OsStr::new("--lazy"),
             self.mountpoint.path().as_os_str(),
@@ -85,7 +85,7 @@ impl Step<LinuxVMBuildContext> for MountFileSystem {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         info!("mounting filesystem (FUSE)");
         let image_file = ctx.get::<ImageFile>("image-file").expect("image-file");
-        let partition_idx = *ctx.get::<usize>(&self.0).expect(&self.0);
+        let partition_idx = *ctx.get::<usize>(self.0).expect(self.0);
 
         let mbr_adapter = Mbr::read_from(image_file.path())?;
         let (offset, _) = mbr_adapter.partition_limits(partition_idx)?;

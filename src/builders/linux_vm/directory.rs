@@ -63,7 +63,7 @@ impl<'a> Directory<'a> {
 
     /// Size of all content in directory in bytes.
     pub fn size(&self) -> Result<u64, DirectoryError> {
-        fs_extra::dir::get_size(&self.path).map_err(|e| DirectoryError::GetSizeError {
+        fs_extra::dir::get_size(self.path).map_err(|e| DirectoryError::GetSizeError {
             path: self.path.to_path_buf(),
             message: e.to_string(),
         })
@@ -135,13 +135,13 @@ impl<'a> Directory<'a> {
     }
 }
 
-impl<'a> fmt::Debug for Directory<'a> {
+impl fmt::Debug for Directory<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.path.fmt(f)
     }
 }
 
-impl<'a> fmt::Display for Directory<'a> {
+impl fmt::Display for Directory<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&format!("{}", self.path.display()))
     }

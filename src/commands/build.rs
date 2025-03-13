@@ -407,7 +407,7 @@ impl TryFrom<&BuildArgs> for linux_vm::LinuxVMBuildContext {
             gen_base_img,
         };
 
-        Ok(Self::from_opts(opts)?)
+        Self::from_opts(opts)
     }
 }
 

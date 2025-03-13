@@ -113,7 +113,7 @@ impl<'a> Mbr<'a> {
     pub fn write(&self, mut mbr: mbrman::MBR) -> Result<(), MbrError> {
         let mut file = fs::OpenOptions::new()
             .write(true)
-            .open(&self.path)
+            .open(self.path)
             .map_err(|err| {
                 MbrError::new("failed to open disk image file".to_string(), err.into())
             })?;
@@ -125,7 +125,7 @@ impl<'a> Mbr<'a> {
 
     /// MBR description.
     pub fn mbr(&self) -> Result<mbrman::MBR, MbrError> {
-        let mut f = fs::File::open(&self.path).map_err(|err| {
+        let mut f = fs::File::open(self.path).map_err(|err| {
             MbrError::new("failed to open disk image file".to_string(), err.into())
         })?;
         mbrman::MBR::read_from(&mut f, Self::SECTOR_SIZE).map_err(|err| {
@@ -154,7 +154,7 @@ impl<'a> Mbr<'a> {
     /// # Arguments
     /// - `size` - number of sectors in the partition ([`Self::SECTOR_SIZE`])
     /// - `partition_type` - type of the partition, e.g. `0x83` for Linux filesystem
-    /// (see https://en.wikipedia.org/wiki/Partition_type)
+    ///   (see https://en.wikipedia.org/wiki/Partition_type)
     /// - `boot` - whether the partition is bootable or not
     ///
     /// # Returns
@@ -246,7 +246,7 @@ impl<'a> Mbr<'a> {
                 partition.starting_lba,
                 partition.sectors,
                 partition.sys,
-                partition.is_active().to_string(),
+                partition.is_active(),
             ));
         }
         Ok(out)
@@ -555,7 +555,7 @@ pub fn try_resize_to_fit_into(
                     None
                 }
             })
-            .fold(0u32, |acc, size| acc + size);
+            .sum::<u32>();
         trace!(
             "free space left on drive for this partition extension: {}s",
             free_space
