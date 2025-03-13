@@ -2,11 +2,12 @@
 
 set -eu
 
-cargo build
+RUST_LOG=gvltctl=trace cargo run -- build \
+    --force \
+    --containerfile Containerfile \
+    --kernel-file bin/bzImage
 
-RUST_LOG=gvltctl=trace ../../../target/debug/gvltctl build --force --containerfile ./Containerfile
-
-RUST_LOG=gvltctl=trace ../../../target/debug/gvltctl local-run disk.img \
+RUST_LOG=gvltctl=trace cargo run -- local-run disk.img \
     --file task.yaml \
     --input inputs/input.txt:input.txt \
     --stdout \
