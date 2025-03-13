@@ -2,7 +2,7 @@
 
 set -eu
 
-cargo build --features vm-builder-v2
+cargo build
 
 RUST_LOG=gvltctl=trace ../../../target/debug/gvltctl build --force --containerfile ./Containerfile
 

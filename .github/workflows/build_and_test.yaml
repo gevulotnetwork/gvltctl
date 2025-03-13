@@ -45,7 +45,7 @@ jobs:
 
       - name: Build gvltctl
         run: |-
-          cargo build --features vm-builder-v2
+          cargo build
           cp target/debug/gvltctl .
 
       - name: Upload build artifacts
