@@ -54,8 +54,8 @@ jobs:
 
       - name: Build gvltctl
         run: |-
-          cargo build
-          cp target/debug/gvltctl .
+          cargo build --locked --release
+          cp target/release/gvltctl .
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
