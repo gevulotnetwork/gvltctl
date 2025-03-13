@@ -313,7 +313,7 @@ impl LinuxVMBuildContext {
 /// Unfortunatelly this solution increases gvltctl executable size by ~20MB.
 pub const BASE_IMAGE: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/src/builders_v2/linux_vm/data/base.img"
+    "/src/builders/linux_vm/data/base.img"
 ));
 
 /// Setup pipeline steps depending on the context.

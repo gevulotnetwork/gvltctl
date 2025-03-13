@@ -3,7 +3,6 @@ use serde_json::Value;
 use std::fmt;
 use std::path::PathBuf;
 
-#[cfg(feature = "vm-builder-v2")]
 use crate::builders::linux_vm;
 use crate::{print_object, OutputFormat};
 
@@ -167,7 +166,6 @@ pub struct BuildArgs {
     /// Use FUSE to mount target image.
     ///
     /// Use native OS mounts instead. Requires root privileges.
-    #[cfg(feature = "vm-builder-v2")]
     #[arg(long)]
     pub fuse: bool,
 
@@ -178,7 +176,6 @@ pub struct BuildArgs {
     /// If this option is set, completely fresh VM image will be created.
     /// Additional dependencies are required: extlinux.
     /// This option implies --fuse disabled.
-    #[cfg(feature = "vm-builder-v2")]
     #[arg(long)]
     pub from_scratch: bool,
 
@@ -187,7 +184,6 @@ pub struct BuildArgs {
     /// Usually defaults to:
     /// - '$HOME/.cache/gvltctl' on Linux
     /// - '$HOME/Library/Caches/gevulot.gvltctl' on MacOS
-    #[cfg(feature = "vm-builder-v2")]
     #[arg(long, value_name = "DIR", value_hint = ValueHint::FilePath, verbatim_doc_comment)]
     pub cache_dir: Option<PathBuf>,
 
@@ -197,7 +193,6 @@ pub struct BuildArgs {
     /// Base image includes bootloader, partition table and filesystem.
     /// Image created with this command is used by default when building VM image from container.
     /// This option implies --fuse disabled.
-    #[cfg(feature = "vm-builder-v2")]
     #[arg(hide = true, long)]
     pub generate_base_image: bool,
 
@@ -304,22 +299,6 @@ impl BuildArgs {
     }
 }
 
-#[cfg(not(feature = "vm-builder-v2"))]
-async fn build(build_args: &BuildArgs) -> Result<Value, Box<dyn std::error::Error>> {
-    use crate::builders::podman_builder::PodmanSyslinuxBuilder;
-    use crate::builders::{BuildOptions, ImageBuilder};
-
-    let options = BuildOptions::from(build_args);
-    let builder = PodmanSyslinuxBuilder {};
-    builder.build(&options)?;
-
-    Ok(serde_json::json!({
-        "message": format!("Created {}", build_args.output_file.display()),
-        "image": &build_args.output_file,
-    }))
-}
-
-#[cfg(feature = "vm-builder-v2")]
 impl TryFrom<&BuildArgs> for linux_vm::LinuxVMBuildContext {
     type Error = anyhow::Error;
 
@@ -432,7 +411,6 @@ impl TryFrom<&BuildArgs> for linux_vm::LinuxVMBuildContext {
     }
 }
 
-#[cfg(feature = "vm-builder-v2")]
 async fn build(build_args: &BuildArgs) -> Result<Value, Box<dyn std::error::Error>> {
     let mut build_context = linux_vm::LinuxVMBuildContext::try_from(build_args)?;
     linux_vm::build(&mut build_context)?;
