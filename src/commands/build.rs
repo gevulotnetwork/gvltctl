@@ -56,7 +56,7 @@ pub struct BuildArgs {
     #[arg(long)]
     pub nvidia_drivers: bool,
 
-    /// [MIA] Load kernel module. Can be passed multiple times.
+    /// (MIA) Load kernel module. Can be passed multiple times.
     ///
     /// MODULENAME will be passed to modprobe.
     /// This option can't be used together with --init or --init-args.
@@ -72,7 +72,7 @@ pub struct BuildArgs {
     /// Example: input:/mnt/input
     ///
     /// These options are passed to MIA to mount before running any commands. Arguments are
-    /// corresponding to mount syscall. If no <fstype> is specified, MIA will use 9p by default.
+    /// corresponding to mount syscall. If no \<fstype\> is specified, MIA will use 9p by default.
     ///
     /// MIA will mount /proc by default. If you don't want this, use --no-default-mounts.
     ///
@@ -84,7 +84,7 @@ pub struct BuildArgs {
     )]
     pub mounts: Vec<String>,
 
-    /// [MIA] Install specified MIA version.
+    /// (MIA) Install specified MIA version.
     ///
     /// Accepted format is from mia-installer.
     /// Examples:
@@ -102,7 +102,7 @@ pub struct BuildArgs {
     )]
     pub mia_version: String,
 
-    /// [MIA] Don't install Gevulot runtime. Only for debug purposes.
+    /// (MIA) Don't install Gevulot runtime. Only for debug purposes.
     ///
     /// No following config will be provided to the VM. Only built-in one will be used.
     /// No input/output context directories will be mounted.
@@ -114,7 +114,7 @@ pub struct BuildArgs {
     #[arg(hide = true, long, conflicts_with_all = ["init", "init_args"])]
     pub no_gevulot_runtime: bool,
 
-    /// [MIA] Don't mount /proc.
+    /// (MIA) Don't mount /proc.
     ///
     /// This option can't be used together with --init or --init-args.
     #[arg(long, conflicts_with_all = ["init", "init_args"])]

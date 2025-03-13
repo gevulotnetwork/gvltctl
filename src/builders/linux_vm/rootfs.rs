@@ -1,6 +1,4 @@
 //! Root filesystem handling.
-//!
-//! Main type is [`RootFS`], which represents filesystem source files to pack into VM.
 
 use anyhow::{Context, Result};
 use bytesize::ByteSize;

@@ -154,7 +154,7 @@ impl<'a> Mbr<'a> {
     /// # Arguments
     /// - `size` - number of sectors in the partition ([`Self::SECTOR_SIZE`])
     /// - `partition_type` - type of the partition, e.g. `0x83` for Linux filesystem
-    ///   (see https://en.wikipedia.org/wiki/Partition_type)
+    ///   (see <https://en.wikipedia.org/wiki/Partition_type>)
     /// - `boot` - whether the partition is bootable or not
     ///
     /// # Returns
