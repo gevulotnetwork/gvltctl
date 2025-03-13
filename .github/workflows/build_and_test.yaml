@@ -43,6 +43,15 @@ jobs:
       - name: Use Rust cache
         uses: Swatinem/rust-cache@v2
 
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run tests
+        run: cargo test --locked
+
+      - name: Run linting
+        run: cargo clippy --locked --no-deps -- --deny warnings
+
       - name: Build gvltctl
         run: |-
           cargo build
