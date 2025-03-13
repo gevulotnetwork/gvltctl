@@ -1,7 +1,7 @@
 //! Version calculation utilities.
 
-use cargo_metadata::Metadata;
 use serde::Deserialize;
+use shadow_rs::cargo_metadata::{self, Metadata};
 
 shadow_rs::shadow!(build_info);
 
