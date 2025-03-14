@@ -1,6 +1,11 @@
-fn main() -> shadow_rs::SdResult<()> {
-    println!("cargo:rerun-if-changed=./");
+use shadow_rs::{BuildPattern, ShadowBuilder};
+
+fn main() {
     let mut deny = std::collections::BTreeSet::new();
     deny.insert(shadow_rs::CARGO_TREE);
-    shadow_rs::new_deny(deny)
+    ShadowBuilder::builder()
+        .build_pattern(BuildPattern::Lazy)
+        .deny_const(deny)
+        .build()
+        .expect("failed to retrieve build info");
 }

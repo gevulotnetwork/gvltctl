@@ -11,7 +11,6 @@ description = "Gevulot Control CLI"
 gevulot-rs = "0.3.0"
 
 bip32 = "0.5.1"
-cargo_metadata = "0.19"
 clap = { version = "4", features = ["derive", "env", "string"] }
 clap_complete = "4.5.13"
 cosmrs = "0.20"
@@ -19,7 +18,7 @@ downloader = "0.2"
 env_logger = "0.11.5"
 patharg = "0.4"
 rand_core = "0.6.4"
-shadow-rs = { version = "0.36", features = ["metadata"] }
+shadow-rs = { version = "1", features = ["metadata"] }
 serde = "1"
 serde_json = "1"
 serde_yaml = "0.9.34"
@@ -56,7 +55,7 @@ mbrman = { version = "0.5", optional = true }
 libz-sys = "1"
 
 [build-dependencies]
-shadow-rs = { version = "0.36", features = ["metadata"] }
+shadow-rs = { version = "1", features = ["metadata"] }
 
 [features]
 # This feature should be enabled when building static executable
