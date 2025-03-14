@@ -20,12 +20,14 @@ pub struct BuildArgs {
     /// Size of the disk image (e.g., 10G, 1024M).
     ///
     /// This determines the total capacity of the VM's virtual disk.
+    /// If not specified, the size will be computed automatically.
     #[arg(long = "size", short = 's', value_name = "SIZE")]
     pub image_size: Option<String>,
 
-    /// Linux kernel version to use (e.g., v6.10).
+    /// Linux kernel version to use (e.g., v6.12). This kernel will be compiled from source.
     ///
-    /// Use 'latest' for the most recent version. This kernel will be compiled from source.
+    /// This version will be checked out in Linux kernel repository.
+    /// Use 'latest' for the most recent version.
     #[arg(
         long = "kernel",
         short = 'k',
@@ -52,7 +54,7 @@ pub struct BuildArgs {
     #[arg(long, value_name = "FILE", value_hint = ValueHint::FilePath)]
     pub kernel_file: Option<String>,
 
-    /// Enables building NVIDIA drivers and including them in the VM image.
+    /// Build NVIDIA drivers and include them in the VM image.
     #[arg(long)]
     pub nvidia_drivers: bool,
 
@@ -72,7 +74,7 @@ pub struct BuildArgs {
     /// Example: input:/mnt/input
     ///
     /// These options are passed to MIA to mount before running any commands. Arguments are
-    /// corresponding to mount syscall. If no \<fstype\> is specified, MIA will use 9p by default.
+    /// corresponding to mount syscall. If no fstype is specified, MIA will use 9p by default.
     ///
     /// MIA will mount /proc by default. If you don't want this, use --no-default-mounts.
     ///
@@ -144,7 +146,7 @@ pub struct BuildArgs {
     /// Path to MBR file.
     ///
     /// If none provided, a number of default locations will be tried.
-    #[arg(long, value_name = "FILE", value_hint = ValueHint::FilePath, verbatim_doc_comment)]
+    #[arg(long, value_name = "FILE", value_hint = ValueHint::FilePath)]
     pub mbr_file: Option<PathBuf>,
 
     /// Name of the output disk image file.
@@ -165,17 +167,21 @@ pub struct BuildArgs {
 
     /// Use FUSE to mount target image.
     ///
-    /// Use native OS mounts instead. Requires root privileges.
+    /// If not specified, native OS mounts will be used instead and root privileges will be required.
+    /// Has effect only if '--root-fs-type ext4' is used.
     #[arg(long)]
     pub fuse: bool,
 
     /// Build VM image from scratch with new filesystem and bootloader.
     ///
-    /// By default pre-built VM image with EXT4 filesystem and EXTLINUX bootloader will be used.
-    /// During build process filesystem will be expanded to required size.
+    /// By default pre-built VM image template will be used.
     /// If this option is set, completely fresh VM image will be created.
-    /// Additional dependencies are required: extlinux.
-    /// This option implies --fuse disabled.
+    /// This basically only affects the boot partition size: in VM image template
+    /// is is predefined as 20 MB, and with this option enabled the size of the partition
+    /// will be automatically computed just to fit the kernel and bootloader.
+    /// You may have to use this option if your kernel size is bigger than 20 MB.
+    /// Requires SYSLINUX to be installed.
+    /// This option implies '--fuse' disabled.
     #[arg(long)]
     pub from_scratch: bool,
 
@@ -189,16 +195,14 @@ pub struct BuildArgs {
 
     /// Generate only base VM image.
     ///
-    /// If this option is enabled, only base VM image will be generated.
+    /// If this option is enabled, only base VM image template will be generated.
     /// Base image includes bootloader, partition table and filesystem.
     /// Image created with this command is used by default when building VM image from container.
     /// This option implies --fuse disabled.
     #[arg(hide = true, long)]
     pub generate_base_image: bool,
 
-    /// Force the build and try to fix known problems along the way.
-    ///
-    /// This will overwrite existing files and attempt to clean up previous build artifacts.
+    /// Overwrite output file if already exists.
     #[arg(long)]
     pub force: bool,
 
@@ -212,17 +216,9 @@ pub struct BuildArgs {
 pub struct Image {
     /// Container image to use as the source.
     ///
-    /// Supports various transport methods:
-    /// - docker: Docker registry (e.g., docker://docker.io/debian:latest)
-    /// - containers-storage: Local container storage (e.g., containers-storage:localhost/myimage:latest)
-    /// - dir: Local directory (e.g., dir:/path/to/image)
-    /// - oci: OCI image layout (e.g., oci:/path/to/layout)
-    /// - docker-archive: Docker archive (e.g., docker-archive:/path/to/archive.tar)
-    ///
-    /// Examples:
-    /// - docker://docker.io/ubuntu:20.04
-    /// - containers-storage:localhost/custom-image:latest
-    #[arg(long, short = 'c', value_name = "IMAGE", verbatim_doc_comment)]
+    /// IMAGE reference format is the same as in 'podman/docker create'
+    /// depending on the container backend used.
+    #[arg(long, short = 'c', value_name = "IMAGE")]
     pub container: Option<String>,
 
     /// Directory containing the root filesystem to use.
