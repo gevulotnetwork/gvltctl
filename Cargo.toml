@@ -8,7 +8,7 @@ repository = "https://github.com/gevulotnetwork/gvltctl"
 description = "Gevulot Control CLI"
 
 [dependencies]
-gevulot-rs = "0.1.3"
+gevulot-rs = "0.3.0"
 
 bip32 = "0.5.1"
 cargo_metadata = "0.19"
@@ -74,9 +74,6 @@ vm-builder-v2 = [
     "dep:tar",
     "dep:mbrman",
 ]
-
-[patch.crates-io]
-gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs", rev = "9aad7a9cbea15e9007ff5b45a566212bdf853620" }
 
 [dev-dependencies]
 minilsof = "0.1"

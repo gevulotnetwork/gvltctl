@@ -158,8 +158,11 @@ async fn create_pin(
                 .creator(me.clone())
                 .cid(pin.spec.cid.clone())
                 .fallback_urls(pin.spec.fallback_urls.unwrap_or_default())
-                .bytes(ByteSize::new(pin.spec.bytes as u64, ByteUnit::Byte))
-                .time(pin.spec.time as u64)
+                .bytes(ByteSize::new(
+                    pin.spec.bytes.bytes()? as u64,
+                    ByteUnit::Byte,
+                ))
+                .time(pin.spec.time.seconds()? as u64)
                 .redundancy(pin.spec.redundancy as u64)
                 .name(pin.metadata.name)
                 .description(pin.metadata.description)
