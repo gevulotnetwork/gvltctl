@@ -123,7 +123,7 @@ impl Kernel {
     ///
     /// Assumes that CWD is kernel directory.
     fn configure() -> Result<()> {
-        run_command(&["make", "x86_64_defconfig"]).context("Failed to configure kernel")?;
+        run_command(["make", "x86_64_defconfig"]).context("Failed to configure kernel")?;
         Self::configure_squashfs()?;
         Ok(())
     }
@@ -158,17 +158,17 @@ impl Kernel {
         const SET_VAL: &[(&str, &str)] = &[("3", "CONFIG_SQUASHFS_FRAGMENT_CACHE_SIZE")];
 
         for flag in ENABLE {
-            run_command(&["scripts/config", "--enable", flag])
+            run_command(["scripts/config", "--enable", flag])
                 .context(format!("failed to enable {} flag to kernel config", flag))?;
         }
 
         for flag in DISABLE {
-            run_command(&["scripts/config", "--disable", flag])
+            run_command(["scripts/config", "--disable", flag])
                 .context(format!("failed to disable {} flag to kernel config", flag))?;
         }
 
         for (val, flag) in SET_VAL {
-            run_command(&["scripts/config", "--set-val", val, flag])
+            run_command(["scripts/config", "--set-val", val, flag])
                 .context(format!("failed to set {} value to kernel config", flag))?;
         }
 
@@ -183,7 +183,7 @@ impl Kernel {
 
         debug!("Building sources");
         let current_dir = std::env::current_dir().context("Failed to get current directory")?;
-        std::env::set_current_dir(&kernel_dir).context("Failed to change to kernel directory")?;
+        std::env::set_current_dir(kernel_dir).context("Failed to change to kernel directory")?;
 
         Self::configure()?;
 
@@ -200,7 +200,7 @@ impl Kernel {
     /// Use existing kernel compiled from sources.
     pub fn use_existing(git_url: &str, version: &str, kernel_dir: &Path) -> Result<Self> {
         let current_dir = std::env::current_dir().context("Failed to get current directory")?;
-        std::env::set_current_dir(&kernel_dir).context("Failed to change to kernel directory")?;
+        std::env::set_current_dir(kernel_dir).context("Failed to change to kernel directory")?;
 
         let kernel_release = run_command(["make", "-s", "kernelrelease"])
             .context("failed to get kernel release string")?
@@ -329,7 +329,7 @@ impl Step<LinuxVMBuildContext> for Precompiled {
 ///
 /// # Context variables defined
 /// - `installed-kernel`: [`PathBuf`] - an absolute path **inside VM** of installed kernel,
-/// e.g. `/boot/bzImage`
+///   e.g. `/boot/bzImage`
 pub struct Install;
 
 impl Step<LinuxVMBuildContext> for Install {

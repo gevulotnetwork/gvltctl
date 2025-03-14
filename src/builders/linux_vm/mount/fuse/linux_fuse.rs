@@ -13,12 +13,15 @@ use crate::builders::Step;
 
 use super::MountHandler;
 
+/// FUSE mount.
+///
+/// Mounted directory will be unmounted and removed on drop.
 #[derive(Debug)]
-pub struct NativeMount {
+pub struct FuseMount {
     mountpoint: TempDir,
 }
 
-impl MountHandler for NativeMount {
+impl MountHandler for FuseMount {
     fn path(&self) -> &Path {
         self.mountpoint.path()
     }
@@ -28,41 +31,43 @@ impl MountHandler for NativeMount {
         P: AsRef<Path>,
     {
         let mountpoint =
-            TempDir::new("mount").context("failed to create temp directory for mounting")?;
-
-        run_command(&[
-            OsStr::new("mount"),
-            // Partition offset (loop device is setting up and detaching automatically)
-            OsStr::new("--options"),
-            OsStr::new(&format!("offset={}", offset)),
+            TempDir::new("linux-vm-mount").context("create temp directory for mounting")?;
+        run_command([
+            OsStr::new("fuse2fs"),
+            OsStr::new("-o"),
+            OsStr::new(&format!("fakeroot,offset={}", offset)),
             source.as_ref().as_os_str(),
             mountpoint.path().as_os_str(),
         ])?;
-
         Ok(Self { mountpoint })
     }
 
     fn unmount_no_drop(&self) -> Result<()> {
-        debug!("unmounting {}", &self);
-        run_command(&[OsStr::new("umount"), self.mountpoint.path().as_os_str()])?;
+        run_command([
+            OsStr::new("umount"),
+            OsStr::new("--lazy"),
+            self.mountpoint.path().as_os_str(),
+        ])
+        .context("unmounting filesystem failed")?;
         Ok(())
     }
 }
 
-impl fmt::Display for NativeMount {
+impl fmt::Display for FuseMount {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&format!("{}", self.mountpoint.path().display()))
     }
 }
 
-impl Drop for NativeMount {
+impl Drop for FuseMount {
     fn drop(&mut self) {
         // ignore errors
+        debug!("unmounting {}", &self);
         let _ = self.unmount_no_drop();
     }
 }
 
-/// Create new native filesystem mount.
+/// Create new filesystem FUSE-based mount.
 ///
 /// `self.0` defines the name of context variable (of type `usize`),
 /// storing the partition number to mount, e.g. `root-partition-number`.
@@ -78,20 +83,22 @@ pub struct MountFileSystem(pub &'static str);
 
 impl Step<LinuxVMBuildContext> for MountFileSystem {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
-        info!("mounting filesystem");
+        info!("mounting filesystem (FUSE)");
         let image_file = ctx.get::<ImageFile>("image-file").expect("image-file");
-        let partition_idx = *ctx.get::<usize>(&self.0).expect(&self.0);
+        let partition_idx = *ctx.get::<usize>(self.0).expect(self.0);
 
         let mbr_adapter = Mbr::read_from(image_file.path())?;
         let (offset, _) = mbr_adapter.partition_limits(partition_idx)?;
 
-        let mount =
-            NativeMount::new(image_file.path(), offset).context("failed to mount failsystem")?;
-        debug!("created mount {}", &mount);
+        let mount = FuseMount::new(image_file.path(), offset).context("mount filesystem")?;
+        debug!("mounted filesystem at {}", &mount);
 
-        ctx.0
-            .set("mountpoint", Box::new(mount.path().to_path_buf()));
-        ctx.0.set("mount", Box::new(mount));
+        // TODO: probably there is a nice way to retrieve this path from trait object of Mount.
+        // However I couldn't find a way to cast into something like `dyn HasMountPoint`.
+        // So we store mountpoint as a separate trivial context variable
+        ctx.set("mountpoint", Box::new(mount.path().to_path_buf()));
+
+        ctx.set("mount", Box::new(mount));
 
         Ok(())
     }

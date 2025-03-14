@@ -80,10 +80,10 @@ impl NvidiaDriversFs {
         debug!("Running container that prepares custom drivers.");
         run_driver_container(&kernel_source_copy, &target_dir)?;
 
-        return Ok(Self {
+        Ok(Self {
             target_dir,
             kernel_release,
-        });
+        })
     }
 
     /// Get size of all files to install.
@@ -149,7 +149,7 @@ fn run_driver_container(
     let kernel_source_copy_str = path_to_str(kernel_source_copy.path())?;
     let target_dir_str = path_to_str(target_dir)?;
 
-    run_command(&[
+    run_command([
         "podman",
         "run",
         "--rm",
@@ -220,7 +220,7 @@ fn build_module_dependencies<P: AsRef<Path>>(
     kernel_release: &str,
 ) -> Result<(), NvidiaError> {
     let vm_root_path_str = path_to_str(vm_root_path.as_ref())?;
-    run_command(&[
+    run_command([
         "depmod",
         "--basedir",
         vm_root_path_str,
@@ -293,7 +293,7 @@ impl Step<LinuxVMBuildContext> for BuildDrivers {
                     .cache()
                     .join("nvidia")
                     .join(DRIVER_VERSION)
-                    .join(&kernel_release);
+                    .join(kernel_release);
 
                 let nvidia_drivers = if target_dir.is_dir() {
                     // If cache entry (directory) already exists, use cached drivers

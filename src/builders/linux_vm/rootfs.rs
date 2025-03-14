@@ -1,6 +1,4 @@
 //! Root filesystem handling.
-//!
-//! Main type is [`RootFS`], which represents filesystem source files to pack into VM.
 
 use anyhow::{Context, Result};
 use bytesize::ByteSize;
@@ -51,7 +49,7 @@ impl Step<LinuxVMBuildContext> for CopyExisting {
         let rootfs = ctx.get::<PathBuf>("root-fs").expect("root-fs");
 
         let src = Directory::from_path(&self.path)?;
-        let dest = Directory::from_path(&rootfs)?;
+        let dest = Directory::from_path(rootfs)?;
         debug!(
             "copying content from {} to {}",
             src.path().display(),
@@ -84,7 +82,7 @@ impl Step<LinuxVMBuildContext> for InstallToMount {
         let mountpoint = ctx.get::<PathBuf>("mountpoint").expect("mountpoint");
         debug!("{} -> {}", rootfs.display(), mountpoint.display());
 
-        let rootfs_dir = Directory::from_path(&rootfs)?;
+        let rootfs_dir = Directory::from_path(rootfs)?;
         rootfs_dir
             .copy_content(mountpoint)
             .context("failed to install root filesystem")?;

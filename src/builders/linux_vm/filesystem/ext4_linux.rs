@@ -126,7 +126,7 @@ impl<'a> Ext4<'a> {
         let mut cur_file = fs::OpenOptions::new()
             .read(true)
             .write(true)
-            .open(&self.path)
+            .open(self.path)
             .context("failed to open image file")?;
         cur_file
             .seek(SeekFrom::Start(self.offset))

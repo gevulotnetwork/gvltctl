@@ -82,7 +82,7 @@ impl<'a> Fat32<'a> {
         let file = fs::OpenOptions::new()
             .read(true)
             .write(true)
-            .open(&self.path)
+            .open(self.path)
             .context("failed to open image file")?;
         let slice =
             StreamSlice::new(file, self.start, self.end).context("failed to seek image file")?;

@@ -33,7 +33,7 @@ impl Step<LinuxVMBuildContext> for CreateGevulotRuntimeDirs {
     fn run(&mut self, ctx: &mut LinuxVMBuildContext) -> Result<()> {
         info!("creating gevulot runtime directories");
         let rootfs = ctx.get::<PathBuf>("root-fs").expect("root-fs");
-        create_dirs(&rootfs).context("failed to create gevulot runtime directories")?;
+        create_dirs(rootfs).context("failed to create gevulot runtime directories")?;
         Ok(())
     }
 }

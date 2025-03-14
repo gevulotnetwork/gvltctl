@@ -6,27 +6,32 @@ Is has pre-compiled Linux kernel v6.12 (`bzImage`) and "Hello world" application
 
 ## Running test
 
-1. Compile gvltctl with `vm-builder-v2` feature
+1. Compile gvltctl
 
     ```shell
-    cargo build --features vm-builder-v2
+    cargo build
     ```
 
 2. Build VM using assets in this directory
 
     ```shell
-    ../../../target/debug/gvltctl build \
+    cargo run -- build \
         --containerfile Containerfile \
-        --kernel-file bin/bzImage \
-        --no-gevulot-runtime
+        --kernel-file bin/bzImage
     ```
 
-    To simplify things we use here `--no-gevulot-runtime` and `--kernel-file`.
+    To simplify things we use pre-compiled kernel `bin/bzImage` here.
 
-3. Run VM with QEMU
+3. Run VM
 
     ```shell
-    qemu-system-x86_64 -machine q35 -enable-kvm -nographic --hda disk.img
+    cargo run -- local-run disk.img \
+        --file task.yaml \
+        --input inputs/input.txt:input.txt \
+        --stdout \
+        --stderr \
+        --smp 1 \
+        --mem 512
     ```
 
     You should see "Hello, world!" message in the output.

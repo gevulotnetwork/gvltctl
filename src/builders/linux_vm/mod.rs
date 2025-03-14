@@ -313,7 +313,7 @@ impl LinuxVMBuildContext {
 /// Unfortunatelly this solution increases gvltctl executable size by ~20MB.
 pub const BASE_IMAGE: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/src/builders_v2/linux_vm/data/base.img"
+    "/src/builders/linux_vm/data/base.img"
 ));
 
 /// Setup pipeline steps depending on the context.
@@ -451,25 +451,23 @@ fn setup_pipeline(ctx: &mut LinuxVMBuildContext) -> Pipeline<LinuxVMBuildContext
 
 /// Set up pipeline for building base image.
 fn setup_base_image_steps() -> Steps<LinuxVMBuildContext> {
-    let mut steps: Steps<_> = Vec::new();
-
-    steps.push(Box::new(image_file::CreateImageFile));
-    steps.push(Box::new(mbr::CreateMBR));
-    // FIXME: there is an issue with resizing existing FAT32 filesystem and not
-    // loosing files and VBR written by SYSLINUX.
-    // Because of that it is impossible right now to format a smaller filesystem
-    // only for bootloader and then resize it before writing the kernel.
-    // To solve this we over-allocate 20 MiB (40960 sectors) for now, which should be enough
-    // for most of the kernels.
-    // If you are facing a panic on kernel installation step ("FAT32 resizing"),
-    // increase this amount here.
-    // Ideally we would like to only allocate the space for bootloader and
-    // filesystem metadata here.
-    steps.push(Box::new(mbr::CreateBootPartition::new(40960)));
-    steps.push(Box::new(filesystem::CreateBootFs));
-    steps.push(Box::new(syslinux::Install));
-
-    steps
+    vec![
+        Box::new(image_file::CreateImageFile),
+        Box::new(mbr::CreateMBR),
+        // FIXME: there is an issue with resizing existing FAT32 filesystem and not
+        // loosing files and VBR written by SYSLINUX.
+        // Because of that it is impossible right now to format a smaller filesystem
+        // only for bootloader and then resize it before writing the kernel.
+        // To solve this we over-allocate 20 MiB (40960 sectors) for now, which should be enough
+        // for most of the kernels.
+        // If you are facing a panic on kernel installation step ("FAT32 resizing"),
+        // increase this amount here.
+        // Ideally we would like to only allocate the space for bootloader and
+        // filesystem metadata here.
+        Box::new(mbr::CreateBootPartition::new(40960)),
+        Box::new(filesystem::CreateBootFs),
+        Box::new(syslinux::Install),
+    ]
 }
 
 pub fn build(ctx: &mut LinuxVMBuildContext) -> Result<serde_json::Value> {

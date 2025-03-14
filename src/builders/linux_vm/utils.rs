@@ -58,7 +58,7 @@ where
     let stdout_thread = thread::spawn(move || {
         BufReader::new(stdout)
             .lines()
-            .filter_map(Result::ok)
+            .map_while(Result::ok)
             .for_each(|line| {
                 trace!(target: stdout_log_target.as_str(), "{}", line);
                 stdout_tx.send(line).unwrap();
@@ -68,7 +68,7 @@ where
     let stderr_thread = thread::spawn(move || {
         BufReader::new(stderr)
             .lines()
-            .filter_map(Result::ok)
+            .map_while(Result::ok)
             .for_each(|line| {
                 trace!(target: stderr_log_target.as_str(), "{}", line);
                 stderr_tx.send(line).unwrap();
