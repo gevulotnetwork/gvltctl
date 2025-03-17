@@ -1,5 +1,5 @@
 FROM alpine:latest
 
-COPY bin/testapp /bin/testapp
+COPY src/main.sh /main.sh
 
-ENTRYPOINT ["testapp"]
+ENTRYPOINT ["sh", "/main.sh"]

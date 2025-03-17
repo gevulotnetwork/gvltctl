@@ -193,6 +193,13 @@ pub async fn create_task(
         .map(|e| (e.source.clone(), e.target.clone()))
         .collect();
 
+    let labels: HashMap<String, String> = task
+        .metadata
+        .labels
+        .into_iter()
+        .map(|label| (label.key, label.value))
+        .collect();
+
     let resp = client
         .tasks
         .create(
@@ -210,15 +217,16 @@ pub async fn create_task(
                         .map(|oc| (oc.source, oc.retention_period as u64))
                         .collect(),
                 )
-                .cpus(task.spec.resources.cpus as u64)
-                .gpus(task.spec.resources.gpus as u64)
+                .cpus(task.spec.resources.cpus.millicores()? as u64)
+                .gpus(task.spec.resources.gpus.millicores()? as u64)
                 .memory(ByteSize::new(
-                    task.spec.resources.memory as u64,
+                    task.spec.resources.memory.bytes()? as u64,
                     ByteUnit::Byte,
                 ))
-                .time(task.spec.resources.time as u64)
-                .store_stdout(task.spec.store_stdout.unwrap_or(false))
-                .store_stderr(task.spec.store_stderr.unwrap_or(false))
+                .time(task.spec.resources.time.seconds()? as u64)
+                .store_stdout(task.spec.store_stdout)
+                .store_stderr(task.spec.store_stderr)
+                .labels(labels)
                 .into_message()?,
         )
         .await?;

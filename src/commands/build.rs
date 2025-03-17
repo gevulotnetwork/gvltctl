@@ -3,7 +3,6 @@ use serde_json::Value;
 use std::fmt;
 use std::path::PathBuf;
 
-#[cfg(feature = "vm-builder-v2")]
 use crate::builders::linux_vm;
 use crate::{print_object, OutputFormat};
 
@@ -15,18 +14,20 @@ pub struct BuildArgs {
     pub image: Image,
 
     /// Container backend to use.
-    #[arg(long, default_value_t = ContainerBackend::Podman)]
+    #[arg(long, default_value_t)]
     pub container_backend: ContainerBackend,
 
     /// Size of the disk image (e.g., 10G, 1024M).
     ///
     /// This determines the total capacity of the VM's virtual disk.
+    /// If not specified, the size will be computed automatically.
     #[arg(long = "size", short = 's', value_name = "SIZE")]
     pub image_size: Option<String>,
 
-    /// Linux kernel version to use (e.g., v6.10).
+    /// Linux kernel version to use (e.g., v6.12). This kernel will be compiled from source.
     ///
-    /// Use 'latest' for the most recent version. This kernel will be compiled from source.
+    /// This version will be checked out in Linux kernel repository.
+    /// Use 'latest' for the most recent version.
     #[arg(
         long = "kernel",
         short = 'k',
@@ -53,11 +54,11 @@ pub struct BuildArgs {
     #[arg(long, value_name = "FILE", value_hint = ValueHint::FilePath)]
     pub kernel_file: Option<String>,
 
-    /// Enables building NVIDIA drivers and including them in the VM image.
+    /// Build NVIDIA drivers and include them in the VM image.
     #[arg(long)]
     pub nvidia_drivers: bool,
 
-    /// [MIA] Load kernel module. Can be passed multiple times.
+    /// (MIA) Load kernel module. Can be passed multiple times.
     ///
     /// MODULENAME will be passed to modprobe.
     /// This option can't be used together with --init or --init-args.
@@ -73,7 +74,7 @@ pub struct BuildArgs {
     /// Example: input:/mnt/input
     ///
     /// These options are passed to MIA to mount before running any commands. Arguments are
-    /// corresponding to mount syscall. If no <fstype> is specified, MIA will use 9p by default.
+    /// corresponding to mount syscall. If no fstype is specified, MIA will use 9p by default.
     ///
     /// MIA will mount /proc by default. If you don't want this, use --no-default-mounts.
     ///
@@ -85,7 +86,7 @@ pub struct BuildArgs {
     )]
     pub mounts: Vec<String>,
 
-    /// [MIA] Install specified MIA version.
+    /// (MIA) Install specified MIA version.
     ///
     /// Accepted format is from mia-installer.
     /// Examples:
@@ -103,7 +104,7 @@ pub struct BuildArgs {
     )]
     pub mia_version: String,
 
-    /// [MIA] Don't install Gevulot runtime. Only for debug purposes.
+    /// (MIA) Don't install Gevulot runtime. Only for debug purposes.
     ///
     /// No following config will be provided to the VM. Only built-in one will be used.
     /// No input/output context directories will be mounted.
@@ -115,7 +116,7 @@ pub struct BuildArgs {
     #[arg(hide = true, long, conflicts_with_all = ["init", "init_args"])]
     pub no_gevulot_runtime: bool,
 
-    /// [MIA] Don't mount /proc.
+    /// (MIA) Don't mount /proc.
     ///
     /// This option can't be used together with --init or --init-args.
     #[arg(long, conflicts_with_all = ["init", "init_args"])]
@@ -145,7 +146,7 @@ pub struct BuildArgs {
     /// Path to MBR file.
     ///
     /// If none provided, a number of default locations will be tried.
-    #[arg(long, value_name = "FILE", value_hint = ValueHint::FilePath, verbatim_doc_comment)]
+    #[arg(long, value_name = "FILE", value_hint = ValueHint::FilePath)]
     pub mbr_file: Option<PathBuf>,
 
     /// Name of the output disk image file.
@@ -160,37 +161,48 @@ pub struct BuildArgs {
     )]
     pub output_file: PathBuf,
 
+    /// Root filesystem type.
+    #[arg(long, default_value_t)]
+    pub root_fs_type: RootFsType,
+
     /// Use FUSE to mount target image.
     ///
-    /// Use native OS mounts instead. Requires root privileges.
-    #[cfg(feature = "vm-builder-v2")]
+    /// If not specified, native OS mounts will be used instead and root privileges will be required.
+    /// Has effect only if '--root-fs-type ext4' is used.
     #[arg(long)]
     pub fuse: bool,
 
     /// Build VM image from scratch with new filesystem and bootloader.
     ///
-    /// By default pre-built VM image with EXT4 filesystem and EXTLINUX bootloader will be used.
-    /// During build process filesystem will be expanded to required size.
+    /// By default pre-built VM image template will be used.
     /// If this option is set, completely fresh VM image will be created.
-    /// Additional dependencies are required: extlinux.
-    /// This option implies --fuse disabled.
-    #[cfg(feature = "vm-builder-v2")]
+    /// This basically only affects the boot partition size: in VM image template
+    /// is is predefined as 20 MB, and with this option enabled the size of the partition
+    /// will be automatically computed just to fit the kernel and bootloader.
+    /// You may have to use this option if your kernel size is bigger than 20 MB.
+    /// Requires SYSLINUX to be installed.
+    /// This option implies '--fuse' disabled.
     #[arg(long)]
     pub from_scratch: bool,
 
+    /// Cache directory.
+    ///
+    /// Usually defaults to:
+    /// - '$HOME/.cache/gvltctl' on Linux
+    /// - '$HOME/Library/Caches/gevulot.gvltctl' on MacOS
+    #[arg(long, value_name = "DIR", value_hint = ValueHint::FilePath, verbatim_doc_comment)]
+    pub cache_dir: Option<PathBuf>,
+
     /// Generate only base VM image.
     ///
-    /// If this option is enabled, only base VM image will be generated.
+    /// If this option is enabled, only base VM image template will be generated.
     /// Base image includes bootloader, partition table and filesystem.
     /// Image created with this command is used by default when building VM image from container.
     /// This option implies --fuse disabled.
-    #[cfg(feature = "vm-builder-v2")]
     #[arg(hide = true, long)]
     pub generate_base_image: bool,
 
-    /// Force the build and try to fix known problems along the way.
-    ///
-    /// This will overwrite existing files and attempt to clean up previous build artifacts.
+    /// Overwrite output file if already exists.
     #[arg(long)]
     pub force: bool,
 
@@ -204,17 +216,9 @@ pub struct BuildArgs {
 pub struct Image {
     /// Container image to use as the source.
     ///
-    /// Supports various transport methods:
-    /// - docker: Docker registry (e.g., docker://docker.io/debian:latest)
-    /// - containers-storage: Local container storage (e.g., containers-storage:localhost/myimage:latest)
-    /// - dir: Local directory (e.g., dir:/path/to/image)
-    /// - oci: OCI image layout (e.g., oci:/path/to/layout)
-    /// - docker-archive: Docker archive (e.g., docker-archive:/path/to/archive.tar)
-    ///
-    /// Examples:
-    /// - docker://docker.io/ubuntu:20.04
-    /// - containers-storage:localhost/custom-image:latest
-    #[arg(long, short = 'c', value_name = "IMAGE", verbatim_doc_comment)]
+    /// IMAGE reference format is the same as in 'podman/docker create'
+    /// depending on the container backend used.
+    #[arg(long, short = 'c', value_name = "IMAGE")]
     pub container: Option<String>,
 
     /// Directory containing the root filesystem to use.
@@ -257,6 +261,32 @@ impl fmt::Display for ContainerBackend {
     }
 }
 
+/// Root filesystem type.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+#[value(rename_all = "lower")]
+pub enum RootFsType {
+    SquashFs,
+    Ext4,
+}
+
+impl Default for RootFsType {
+    fn default() -> Self {
+        Self::SquashFs
+    }
+}
+
+impl fmt::Display for RootFsType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.to_possible_value()
+                .expect("no skipped values")
+                .get_name()
+        )
+    }
+}
+
 impl BuildArgs {
     /// Run build subcommand.
     pub async fn run(&self, format: OutputFormat) -> Result<(), Box<dyn std::error::Error>> {
@@ -265,38 +295,28 @@ impl BuildArgs {
     }
 }
 
-#[cfg(not(feature = "vm-builder-v2"))]
-async fn build(build_args: &BuildArgs) -> Result<Value, Box<dyn std::error::Error>> {
-    use crate::builders::podman_builder::PodmanSyslinuxBuilder;
-    use crate::builders::{BuildOptions, ImageBuilder};
-
-    let options = BuildOptions::from(build_args);
-    let builder = PodmanSyslinuxBuilder {};
-    builder.build(&options)?;
-
-    Ok(serde_json::json!({
-        "message": format!("Created {}", build_args.output_file.display()),
-        "image": &build_args.output_file,
-    }))
-}
-
-#[cfg(feature = "vm-builder-v2")]
 impl TryFrom<&BuildArgs> for linux_vm::LinuxVMBuildContext {
     type Error = anyhow::Error;
 
     fn try_from(opts: &BuildArgs) -> Result<Self, Self::Error> {
         use anyhow::{anyhow, bail};
-        use linux_vm::{FilesystemSource, ImageFileOpts, InitSystemOpts, KernelOpts, MountType};
+        use bytesize::ByteSize;
+        use linux_vm::{
+            FilesystemSource, ImageFileOpts, InitSystemOpts, KernelOpts, MountType, RootFsOpts,
+        };
 
         let image_file_opts = ImageFileOpts {
             path: PathBuf::from(&opts.output_file),
-            size: if let Some(size) = &opts.image_size {
-                size.parse::<bytesize::ByteSize>()
-                    .map_err(|_| anyhow!("invalid image size"))?
-                    .as_u64()
-            } else {
-                linux_vm::MIN_IMAGE_SIZE.as_u64()
-            },
+            size: opts
+                .image_size
+                .as_ref()
+                .map(|size| {
+                    size.parse::<ByteSize>()
+                        .as_ref()
+                        .map(ByteSize::as_u64)
+                        .map_err(|_| anyhow!("invalid image size"))
+                })
+                .transpose()?,
             force: opts.force,
         };
 
@@ -312,12 +332,6 @@ impl TryFrom<&BuildArgs> for linux_vm::LinuxVMBuildContext {
         };
 
         let nvidia_drivers = opts.nvidia_drivers;
-
-        let mount_type = if opts.fuse && !opts.from_scratch {
-            MountType::Fuse
-        } else {
-            MountType::Native
-        };
 
         let init_system_opts = if let Some(init) = &opts.init {
             InitSystemOpts::Custom {
@@ -356,29 +370,43 @@ impl TryFrom<&BuildArgs> for linux_vm::LinuxVMBuildContext {
             bail!("no source was specified");
         };
 
+        let root_fs_opts = match &opts.root_fs_type {
+            RootFsType::SquashFs => RootFsOpts::SquashFs,
+            RootFsType::Ext4 => {
+                let mount_type = if opts.fuse && !opts.from_scratch {
+                    MountType::Fuse
+                } else {
+                    MountType::Native
+                };
+                RootFsOpts::Ext4 { mount_type }
+            }
+        };
+
+        let cache_dir = opts.cache_dir.clone();
+
         let gen_base_img = opts.generate_base_image;
-        let from_scratch = opts.from_scratch;
+        let from_scratch = gen_base_img || opts.from_scratch;
         let mbr_file = opts.mbr_file.clone();
         let rw_root = opts.rw_root;
 
         let opts = linux_vm::BuildOpts {
             image_file_opts,
             kernel_opts,
-            mount_type,
             nvidia_drivers,
             init_system_opts,
             fs_source,
             from_scratch,
+            root_fs_opts,
             mbr_file,
+            cache_dir,
             rw_root,
             gen_base_img,
         };
 
-        Ok(Self::from_opts(opts)?)
+        Self::from_opts(opts)
     }
 }
 
-#[cfg(feature = "vm-builder-v2")]
 async fn build(build_args: &BuildArgs) -> Result<Value, Box<dyn std::error::Error>> {
     let mut build_context = linux_vm::LinuxVMBuildContext::try_from(build_args)?;
     linux_vm::build(&mut build_context)?;

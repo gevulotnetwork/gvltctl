@@ -65,7 +65,7 @@ To build Linux kernel from sources (not needed if using pre-compiled kernel with
 
 - `git build-essential libncurses-dev gawk flex bison openssl libssl-dev dkms libelf-dev libudev-dev libpci-dev libiberty-dev autoconf llvm bc`
 
-To operate on VM filesystem:
+To use EXT4 as root filesystem inside VM (see `--root-fs-type` option):
 
 - `e2fsprogs`
 
@@ -73,13 +73,23 @@ To mount VM filesystem using FUSE (see `--fuse` option):
 
 - `fuse2fs`
 
+To build VM image from scratch without using base image (see `--from-scratch` option):
+
+- `syslinux`
+
+#### `gvltctl local-run`
+
+`gvltctl local-run` needs additional dependencies:
+
+- `qemu-system-x86_64`
+
 ## Usage
 
 ```plain
 $ gvltctl --help
 Gevulot Control CLI
 
-Usage: gvltctl <COMMAND>
+Usage: gvltctl [OPTIONS] <COMMAND>
 
 Commands:
   worker               Commands related to workers
@@ -93,15 +103,16 @@ Commands:
   generate-completion  Generate shell completion scripts
   sudo                 Perform administrative operations with sudo privileges
   build                Build a VM image from a container, rootfs directory, or Containerfile
+  local-run            Run VM locally
   help                 Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help     Print help
-  -V, --version  Print version
+  -F, --format <FORMAT>  Sets the output format [env: GEVULOT_FORMAT=] [default: yaml] [possible values: yaml, json, prettyjson, toml]
+  -h, --help             Print help
+  -V, --version          Print version
+
 ```
 
 ## Supported platforms
 
 `gvltctl` is supported on both Linux and MacOS (Windows is not tested, but probably also works).
-
-Building Linux VM (`gvltctl build`) is only supported on Linux right now.

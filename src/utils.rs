@@ -23,7 +23,7 @@ use crate::commands::ChainArgs;
 ///
 /// # Returns
 ///
-/// A Result containing a GevulotClient if successful, or a Box<dyn std::error::Error> if an error occurs.
+/// A Result containing a GevulotClient if successful, or a `Box<dyn std::error::Error>` if an error occurs.
 pub async fn connect_to_gevulot(
     chain_args: &ChainArgs,
 ) -> Result<GevulotClient, Box<dyn std::error::Error>> {
@@ -72,7 +72,7 @@ pub async fn connect_to_gevulot(
 ///
 /// # Returns
 ///
-/// A Result containing the parsed value of type T if successful, or a Box<dyn std::error::Error> if an error occurs.
+/// A Result containing the parsed value of type T if successful, or a `Box<dyn std::error::Error>` if an error occurs.
 pub async fn read_file<T: DeserializeOwned>(
     path: Option<&Path>,
 ) -> Result<T, Box<dyn std::error::Error>> {

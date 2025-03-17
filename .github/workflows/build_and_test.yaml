@@ -1,0 +1,151 @@
+name: Build and test
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+      - dev
+    tags:
+      - "*"
+
+jobs:
+  build-gvltctl:
+    name: Build gvltctl
+
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Update APT packages
+        run: |-
+          sudo apt-get update
+
+      - name: Install Buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          default: true
+
+      - name: Use Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run tests
+        run: cargo test --locked
+
+      - name: Run linting
+        run: cargo clippy --locked --no-deps -- --deny warnings
+
+      - name: Build gvltctl
+        run: |-
+          cargo build --locked --release
+          cp target/release/gvltctl .
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gvltctl-exe
+          path: gvltctl
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: true
+
+  test-vm-builder:
+    name: Build and run test VM
+
+    needs: [build-gvltctl]
+
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Download gvltctl
+        uses: actions/download-artifact@v4
+        with:
+          name: gvltctl-exe
+          path: tests/vm_builder/simple_vm
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update APT packages
+        run: |-
+          sudo apt-get update
+
+      - name: Install gvltctl runtime dependencies
+        run: |-
+          sudo apt-get install -y ca-certificates
+
+      # We are using pre-compiled kernel in tests, so we don't need Linux kernel build dependencies.
+      - name: Install VM builder runtime dependencies
+        run: |-
+          sudo apt-get install -y podman
+
+      - name: Install QEMU
+        run: |-
+          sudo apt-get install -y qemu-system-x86
+
+      - name: Build test VM image
+        working-directory: tests/vm_builder/simple_vm
+        env:
+          RUST_LOG: gvltctl=trace
+        run: |-
+          chmod +x ./gvltctl
+          ./gvltctl build \
+            --containerfile Containerfile \
+            --kernel-file bin/bzImage
+
+      - name: Check disk.img file
+        working-directory: tests/vm_builder/simple_vm
+        run: |-
+          file disk.img
+
+      - name: Run test VM
+        working-directory: tests/vm_builder/simple_vm
+        run: |-
+          ./gvltctl local-run disk.img \
+            --file task.yaml \
+            --input inputs/input.txt:input.txt \
+            --stdout \
+            --stderr \
+            --smp 1 \
+            --mem 512
+          ok=true
+          echo "Checking stdout..."
+          res=$(grep "Hello, world!" < ./output/stdout)
+          if [[ $res = "" ]]; then
+            echo "FAILED"
+            ok=false
+          else
+            echo "OK"
+          fi
+          echo "Checking output file..."
+          res=$(grep "This is output." < ./output/output.txt)
+          if [[ $res = "" ]]; then
+            echo "FAILED"
+            ok=false
+          else
+            echo "OK"
+          fi
+          if [ "$ok" = true ]; then
+            echo "Tests passed"
+          else
+            echo "Tests failed"
+            exit 1;
+          fi

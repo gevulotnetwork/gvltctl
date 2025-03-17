@@ -29,7 +29,7 @@ COPY Cargo.toml Cargo.toml
 COPY Cargo.lock Cargo.lock
 
 # Build sources
-RUN cargo build --features vm-builder-v2
+RUN cargo build
 
 FROM ubuntu:24.04
 
