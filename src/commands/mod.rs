@@ -14,6 +14,16 @@ pub struct ChainArgs {
     )]
     pub endpoint: Option<String>,
 
+    /// Sets the chain ID for the Gevulot client.
+    #[arg(
+        global = true,
+        long = "chain-id",
+        short = 'c',
+        env = "CHAIN_ID",
+        value_name = "CHAIN_ID"
+    )]
+    pub chain_id: Option<String>,
+
     /// Sets the gas price for the Gevulot client.
     #[arg(
         global = true,
