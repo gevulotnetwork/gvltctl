@@ -54,6 +54,11 @@ pub async fn connect_to_gevulot(
         client_builder = client_builder.password(password);
     }
 
+    // Set the chain ID if provided
+    if let Some(chain_id) = &chain_args.chain_id {
+        client_builder = client_builder.chain_id(chain_id);
+    }
+
     // Build and return the client
     let client = client_builder.build().await?;
 
