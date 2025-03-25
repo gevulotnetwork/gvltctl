@@ -43,9 +43,11 @@ impl Cli {
             Command::Task(command) => command.run(self.format).await,
             Command::Pin(command) => command.run(self.format).await,
             Command::Workflow(command) => command.run().await,
-            Command::Keygen { file, password } => {
-                generate_key(file.path_ref(), password, self.format).await
-            }
+            Command::Keygen {
+                file,
+                password,
+                account_prefix,
+            } => generate_key(file.path_ref(), password, account_prefix, self.format).await,
             Command::ComputeKey { mnemonic, password } => {
                 compute_key(mnemonic, password, self.format).await
             }
@@ -92,6 +94,10 @@ pub enum Command {
         /// Sets the password for the Gevulot client.
         #[arg(short, long, default_value_t, hide_default_value = true)]
         password: String,
+
+        /// The account prefix to use for the key.
+        #[arg(short, long, default_value_t = String::from("gvlt"))]
+        account_prefix: String,
     },
 
     /// Compute a key.
@@ -216,6 +222,7 @@ async fn account_info(
 async fn generate_key(
     path: Option<&PathBuf>,
     password: &str,
+    account_prefix: &str,
     format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Generate random Mnemonic using the default language (English)
@@ -242,7 +249,7 @@ async fn generate_key(
     // Get the ECDSA/secp256k1 signing and verification keys for the xprv and xpub
     let sk = SigningKey::from_slice(&child_xprv.private_key().to_bytes())?;
 
-    let account_id = sk.public_key().account_id("gvlt").unwrap();
+    let account_id = sk.public_key().account_id(account_prefix).unwrap();
     let phrase = mnemonic.phrase();
 
     let output = serde_json::json!({
