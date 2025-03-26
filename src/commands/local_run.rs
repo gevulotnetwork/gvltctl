@@ -9,6 +9,7 @@ use gevulot_rs::runtime_config::{self, DebugExit, RuntimeConfig};
 use log::debug;
 use serde_json::Value;
 use std::ffi::{OsStr, OsString};
+use std::os::unix::process::ExitStatusExt;
 use std::path::{self, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
@@ -840,8 +841,25 @@ fn run_cmd(
             )
             .into())
         }
+    } else if let Some(signal) = exit_status.signal() {
+        Err(format!(
+            "QEMU was terminated by signal: {}{}",
+            signal,
+            if exit_status.core_dumped() {
+                " [core dumped]"
+            } else {
+                ""
+            }
+        )
+        .into())
+    } else if let Some(signal) = exit_status.stopped_signal() {
+        Err(format!("QEMU was stopped by signal: {}", signal).into())
     } else {
-        Err("VM terminated unexpectedly".into())
+        Err(format!(
+            "unexpected QEMU process event (wait status: {})",
+            exit_status.into_raw()
+        )
+        .into())
     }
 }
 
