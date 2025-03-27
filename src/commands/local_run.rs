@@ -338,7 +338,7 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
         run_args.stderr,
     )
     .map_err(into_anyhow)
-    .context("QEMU failed")?;
+    .context("VM execution failed")?;
     let execution_time = timestamp.elapsed();
 
     let output_paths = store_outputs(run_args, &task_spec, &runtime_dirs.output)
@@ -347,7 +347,7 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
         .context("failed to store output context")?;
 
     Ok(serde_json::json!({
-        "message": "VM program exited successfully",
+        "message": "main program exited successfully",
         "execution_time": execution_time.as_secs(),
         "output_contexts": output_paths,
         "stdout": stdout_file,
@@ -847,7 +847,7 @@ fn process_exit_status(exit_status: ExitStatus) -> Result<()> {
         if code == success_code {
             Ok(())
         } else if code == error_code {
-            Err("VM program failed".into())
+            Err("main program exited with error".into())
         } else {
             Err(format!(
                 "QEMU exited with code: {} (abnormal exit code for VM)",
