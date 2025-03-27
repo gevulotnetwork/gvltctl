@@ -12,7 +12,7 @@ use serde_json::Value;
 use std::ffi::{OsStr, OsString};
 use std::os::unix::process::ExitStatusExt;
 use std::path::{self, Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::Instant;
 use tempdir::TempDir;
@@ -826,9 +826,22 @@ fn run_cmd(
     stdout_thread.join().expect("failed to join thread");
     stderr_thread.join().expect("failed to join thread");
 
+    process_exit_status(exit_status)
+}
+
+/// Convert `ExitStatus` into meaningful error message if needed.
+fn process_exit_status(exit_status: ExitStatus) -> Result<()> {
     let DebugExit::X86 { success_code, .. } = DEBUG_EXIT;
     let success_code = success_code as i32;
     let error_code = 1i32;
+
+    let append_signal_name = |signal: i32| -> String {
+        if let Some(name) = Signal::try_from(signal).ok().map(Signal::as_str) {
+            format!(" ({})", name)
+        } else {
+            "".to_string()
+        }
+    };
 
     if let Some(code) = exit_status.code() {
         if code == success_code {
@@ -846,11 +859,7 @@ fn run_cmd(
         Err(format!(
             "QEMU was terminated by signal: {}{}{}",
             signal,
-            if let Some(name) = Signal::try_from(signal).ok().map(Signal::as_str) {
-                format!(" ({})", name)
-            } else {
-                "".to_string()
-            },
+            append_signal_name(signal),
             if exit_status.core_dumped() {
                 " [core dumped]"
             } else {
@@ -862,11 +871,7 @@ fn run_cmd(
         Err(format!(
             "QEMU was stopped by signal: {}{}",
             signal,
-            if let Some(name) = Signal::try_from(signal).ok().map(Signal::as_str) {
-                format!(" ({})", name)
-            } else {
-                "".to_string()
-            }
+            append_signal_name(signal),
         )
         .into())
     } else {
