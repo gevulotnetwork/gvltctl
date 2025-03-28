@@ -49,6 +49,11 @@ pub async fn connect_to_gevulot(
         client_builder = client_builder.mnemonic(mnemonic);
     }
 
+    // Set the private key if provided
+    if let Some(private_key) = &chain_args.private_key {
+        client_builder = client_builder.private_key(private_key);
+    }
+
     // Set the password if provided
     if let Some(password) = &chain_args.password {
         client_builder = client_builder.password(password);

@@ -46,6 +46,7 @@ oci-spec = "0.7"
 tar = "0.4"
 tempdir = "0.3"
 thiserror = "1"
+hex = "0.4.3"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # This is here to clear libz-sys features and avoid compilation errors.
