@@ -48,9 +48,12 @@ impl Cli {
                 password,
                 account_prefix,
             } => generate_key(file.path_ref(), password, account_prefix, self.format).await,
-            Command::ComputeKey { mnemonic, password } => {
-                compute_key(mnemonic, password, self.format).await
-            }
+            Command::ComputeKey {
+                mnemonic,
+                private_key,
+                password,
+                account_prefix,
+            } => compute_key(mnemonic, private_key, password, account_prefix, self.format).await,
             Command::Send {
                 chain_args,
                 amount,
@@ -104,11 +107,19 @@ pub enum Command {
     ComputeKey {
         /// The mnemonic to compute the key from.
         #[arg(long, env = "GEVULOT_MNEMONIC", hide_env_values = true)]
-        mnemonic: String,
+        mnemonic: Option<String>,
+
+        /// The private key to compute the key from.
+        #[arg(long, env = "GEVULOT_PRIVATE_KEY", hide_env_values = true)]
+        private_key: Option<String>,
 
         /// The password to compute the key with.
         #[arg(short, long, default_value_t, hide_default_value = true)]
         password: String,
+
+        /// The account prefix to use for the key.
+        #[arg(short, long, default_value_t = String::from("gvlt"))]
+        account_prefix: String,
     },
 
     /// Send tokens to a receiver on the Gevulot network.
@@ -252,9 +263,13 @@ async fn generate_key(
     let account_id = sk.public_key().account_id(account_prefix).unwrap();
     let phrase = mnemonic.phrase();
 
+    let private_key = child_xprv.private_key().to_bytes();
+    let private_key_hex = hex::encode(private_key);
+
     let output = serde_json::json!({
         "account_id": account_id,
-        "mnemonic": phrase
+        "mnemonic": phrase,
+        "private_key": private_key_hex,
     });
 
     if let Some(file) = path {
@@ -269,34 +284,25 @@ async fn generate_key(
 
 /// Generates a new key and optionally saves it to a file.
 async fn compute_key(
-    mnemonic: &str,
+    mnemonic: &Option<String>,
+    private_key: &Option<String>,
     password: &str,
+    prefix: &str,
     format: OutputFormat,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mnemonic = Mnemonic::new(mnemonic, bip32::Language::English)?;
+    let sk = if let Some(private_key) = private_key {
+        SigningKey::from_slice(hex::decode(private_key)?.as_slice())?
+    } else if let Some(mnemonic) = mnemonic {
+        let mnemonic = Mnemonic::new(mnemonic, bip32::Language::English)?;
+        let seed = mnemonic.to_seed(password);
+        let child_path = "m/44'/118'/0'/0/0";
+        let child_xprv = XPrv::derive_from_path(&seed, &child_path.parse()?)?;
+        SigningKey::from_slice(&child_xprv.private_key().to_bytes())?
+    } else {
+        return Err("Either mnemonic or private key must be provided".into());
+    };
 
-    // Derive a BIP39 seed value using the given password
-    let seed = mnemonic.to_seed(password);
-
-    // Derive a child `XPrv` using the provided BIP32 derivation path
-    let child_path = "m/44'/118'/0'/0/0";
-    let child_xprv = XPrv::derive_from_path(&seed, &child_path.parse()?)?;
-
-    // Get the `XPub` associated with `child_xprv`.
-    let child_xpub = child_xprv.public_key();
-
-    // Serialize `child_xprv` as a string with the `xprv` prefix.
-    let child_xprv_str = child_xprv.to_string(Prefix::XPRV);
-    assert!(child_xprv_str.starts_with("xprv"));
-
-    // Serialize `child_xpub` as a string with the `xpub` prefix.
-    let child_xpub_str = child_xpub.to_string(Prefix::XPUB);
-    assert!(child_xpub_str.starts_with("xpub"));
-
-    // Get the ECDSA/secp256k1 signing and verification keys for the xprv and xpub
-    let sk = SigningKey::from_slice(&child_xprv.private_key().to_bytes())?;
-
-    let account_id = sk.public_key().account_id("gvlt").unwrap();
+    let account_id = sk.public_key().account_id(prefix).unwrap();
 
     let output = serde_json::json!({ "account_id": account_id });
     print_object(format, &output)?;

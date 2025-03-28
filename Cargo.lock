@@ -1360,6 +1360,7 @@ dependencies = [
  "fs_extra",
  "fscommon",
  "gevulot-rs 0.3.0",
+ "hex",
  "libz-sys",
  "log",
  "mbrman",
