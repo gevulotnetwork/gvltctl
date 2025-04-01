@@ -125,6 +125,32 @@ impl Kernel {
     fn configure() -> Result<()> {
         run_command(["make", "x86_64_defconfig"]).context("Failed to configure kernel")?;
         Self::configure_squashfs()?;
+        Self::configure_cpu_nb(1024)?;
+        Ok(())
+    }
+
+    /// Configure the kernel to allow a specific number of CPU
+    ///
+    /// Assumes that CWD is kernel directory.
+    fn configure_cpu_nb(cpu: usize) -> Result<()> {
+        let kernel_config_path = Path::new(".config");
+        let config_content =
+            fs::read_to_string(kernel_config_path).context("Failed to read kernel .config file")?;
+
+        let new_content = config_content
+            .lines()
+            .map(|line| {
+                if line.starts_with("CONFIG_NR_CPUS=") {
+                    format!("CONFIG_NR_CPUS={}", cpu)
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect::<Vec<String>>()
+            .join("\n");
+
+        fs::write(kernel_config_path, new_content)
+            .context("Failed to write modified kernel .config file")?;
         Ok(())
     }
 
