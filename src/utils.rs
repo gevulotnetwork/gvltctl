@@ -39,6 +39,10 @@ pub async fn connect_to_gevulot(
         client_builder = client_builder.gas_price(gas_price);
     }
 
+    if let Some(gas_limit) = chain_args.gas_limit {
+        client_builder = client_builder.gas_limit(gas_limit);
+    }
+
     // Set the gas multiplier if provided
     if let Some(gas_multiplier) = chain_args.gas_multiplier {
         client_builder = client_builder.gas_multiplier(gas_multiplier);
