@@ -1267,7 +1267,7 @@ dependencies = [
 [[package]]
 name = "gevulot-rs"
 version = "0.3.0"
-source = "git+https://github.com/gevulotnetwork/gevulot-rs.git?branch=feature%2Fmanual-gas-limit#6b4595d8eb2b79f17f32177f0e61d88281023bc7"
+source = "git+https://github.com/gevulotnetwork/gevulot-rs.git?branch=dev#379f286323867085a2612841556e3867305d805f"
 dependencies = [
  "backon",
  "bip32",
