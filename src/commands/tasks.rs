@@ -160,7 +160,7 @@ async fn get_task(
 /// # Arguments
 ///
 /// * `_sub_m` - A reference to the ArgMatches struct containing parsed command-line arguments.
-///              This is used to read the task specification file, connect to Gevulot, and determine the output format.
+///   This is used to read the task specification file, connect to Gevulot, and determine the output format.
 ///
 /// # Returns
 ///
