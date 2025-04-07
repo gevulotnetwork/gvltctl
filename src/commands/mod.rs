@@ -44,6 +44,16 @@ pub struct ChainArgs {
     )]
     pub gas_multiplier: Option<f64>,
 
+    /// Sets the gas limit for the Gevulot client, this will stop simulation and use the provided limit.
+    #[arg(
+        global = true,
+        long = "gas-limit",
+        short = 'l',
+        env = "GEVULOT_GAS_LIMIT",
+        value_name = "LIMIT"
+    )]
+    pub gas_limit: Option<u64>,
+
     /// Sets the mnemonic for the Gevulot client.
     #[arg(
         global = true,
