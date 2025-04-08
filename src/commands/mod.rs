@@ -64,6 +64,16 @@ pub struct ChainArgs {
     )]
     pub mnemonic: Option<String>,
 
+    /// Sets the private key for the Gevulot client from hex.
+    #[arg(
+        global = true,
+        long,
+        short = 'k',
+        env = "GEVULOT_PRIVATE_KEY",
+        hide_env_values = true
+    )]
+    pub private_key: Option<String>,
+
     /// Sets the password for the Gevulot client.
     #[arg(
         global = true,
