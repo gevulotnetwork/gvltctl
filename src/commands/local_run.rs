@@ -7,10 +7,12 @@ use gevulot_rs::models::{
 };
 use gevulot_rs::runtime_config::{self, DebugExit, RuntimeConfig};
 use log::debug;
+use nix::sys::signal::Signal;
 use serde_json::Value;
 use std::ffi::{OsStr, OsString};
+use std::os::unix::process::ExitStatusExt;
 use std::path::{self, Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::Instant;
 use tempdir::TempDir;
@@ -336,7 +338,7 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
         run_args.stderr,
     )
     .map_err(into_anyhow)
-    .context("QEMU failed")?;
+    .context("VM execution failed")?;
     let execution_time = timestamp.elapsed();
 
     let output_paths = store_outputs(run_args, &task_spec, &runtime_dirs.output)
@@ -345,7 +347,7 @@ async fn run(run_args: &RunArgs) -> anyhow::Result<Value> {
         .context("failed to store output context")?;
 
     Ok(serde_json::json!({
-        "message": "VM program exited successfully",
+        "message": "main program exited successfully",
         "execution_time": execution_time.as_secs(),
         "output_contexts": output_paths,
         "stdout": stdout_file,
@@ -824,15 +826,28 @@ fn run_cmd(
     stdout_thread.join().expect("failed to join thread");
     stderr_thread.join().expect("failed to join thread");
 
+    process_exit_status(exit_status)
+}
+
+/// Convert `ExitStatus` into meaningful error message if needed.
+fn process_exit_status(exit_status: ExitStatus) -> Result<()> {
     let DebugExit::X86 { success_code, .. } = DEBUG_EXIT;
     let success_code = success_code as i32;
     let error_code = 1i32;
+
+    let append_signal_name = |signal: i32| -> String {
+        if let Some(name) = Signal::try_from(signal).ok().map(Signal::as_str) {
+            format!(" ({})", name)
+        } else {
+            "".to_string()
+        }
+    };
 
     if let Some(code) = exit_status.code() {
         if code == success_code {
             Ok(())
         } else if code == error_code {
-            Err("VM program failed".into())
+            Err("main program exited with error".into())
         } else {
             Err(format!(
                 "QEMU exited with code: {} (abnormal exit code for VM)",
@@ -840,8 +855,31 @@ fn run_cmd(
             )
             .into())
         }
+    } else if let Some(signal) = exit_status.signal() {
+        Err(format!(
+            "QEMU was terminated by signal: {}{}{}",
+            signal,
+            append_signal_name(signal),
+            if exit_status.core_dumped() {
+                " [core dumped]"
+            } else {
+                ""
+            }
+        )
+        .into())
+    } else if let Some(signal) = exit_status.stopped_signal() {
+        Err(format!(
+            "QEMU was stopped by signal: {}{}",
+            signal,
+            append_signal_name(signal),
+        )
+        .into())
     } else {
-        Err("VM terminated unexpectedly".into())
+        Err(format!(
+            "unexpected QEMU process event (wait status: {})",
+            exit_status.into_raw()
+        )
+        .into())
     }
 }
 
