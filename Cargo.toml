@@ -16,6 +16,7 @@ clap_complete = "4.5.13"
 cosmrs = "0.20"
 downloader = "0.2"
 env_logger = "0.11.5"
+nix = { version = "0.29", features = ["signal"], default-features = false }
 patharg = "0.4"
 rand_core = "0.6.4"
 shadow-rs = { version = "1", features = ["metadata"] }
@@ -62,3 +63,6 @@ openssl-vendored = ["openssl/vendored"]
 
 [dev-dependencies]
 minilsof = "0.1"
+
+[patch.crates-io]
+gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", branch = "dev" }
