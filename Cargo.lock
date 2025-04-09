@@ -1261,8 +1261,7 @@ dependencies = [
 [[package]]
 name = "gevulot-rs"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae385a54804aff8392427af275d4ab2de2e9da37e7d9a68419e7c6ce9bc143f6"
+source = "git+https://github.com/gevulotnetwork/gevulot-rs.git?branch=main#67cdf53009d4d2bfba815b81645f201830a66ee6"
 dependencies = [
  "backon",
  "bip32",

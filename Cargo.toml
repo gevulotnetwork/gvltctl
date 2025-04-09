@@ -62,3 +62,6 @@ openssl-vendored = ["openssl/vendored"]
 
 [dev-dependencies]
 minilsof = "0.1"
+
+[patch.crates-io]
+gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", branch = "main" }
