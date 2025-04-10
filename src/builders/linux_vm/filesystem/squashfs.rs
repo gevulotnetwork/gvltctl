@@ -178,7 +178,7 @@ impl Step<LinuxVMBuildContext> for EvaluateSize {
             .fs_writer_mut()
             .write(&mut tmp)
             .context("failed to write SquashFS to temp file")?;
-        debug!("SquashFS size: {}", ByteSize::b(size).to_string_as(true));
+        debug!("SquashFS size: {}", ByteSize::b(size).display());
 
         ctx.set("root-partition-size", Box::new(size));
         ctx.set("squashfs-image", Box::new(squashfs_image_path));

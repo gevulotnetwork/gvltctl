@@ -34,7 +34,7 @@ mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", tag = "mia-
 anyhow = "1"
 backhand = { version = "0.20", default-features = false, features = ["xz"] }
 base64 = "0.22"
-bytesize = "1"
+bytesize = "2"
 crc = "3"
 directories = "5"
 fatfs = "0.3"

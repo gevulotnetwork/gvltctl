@@ -387,6 +387,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e93abca9e28e0a1b9877922aacb20576e05d4679ffa78c3d6dc22a26a216659"
 
 [[package]]
+name = "bytesize"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3c8f83209414aacf0eeae3cf730b18d6981697fba62f200fcfb92b9f082acba"
+
+[[package]]
 name = "camino"
 version = "1.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1273,7 +1279,7 @@ checksum = "cc328be91b31fbc8dd8c82b0d959f2a9c0349e35297f59d661436540597491f2"
 dependencies = [
  "backon",
  "bip32",
- "bytesize",
+ "bytesize 1.3.3",
  "const_format",
  "cosmos-sdk-proto",
  "cosmrs",
@@ -1307,7 +1313,7 @@ checksum = "04a5c1c12a6adff0a7f6eed03f5aa4e589a874efbbbcd9587428ca004a87d402"
 dependencies = [
  "backon",
  "bip32",
- "bytesize",
+ "bytesize 1.3.3",
  "const_format",
  "cosmos-sdk-proto",
  "cosmrs",
@@ -1389,7 +1395,7 @@ dependencies = [
  "backhand",
  "base64 0.22.1",
  "bip32",
- "bytesize",
+ "bytesize 2.0.1",
  "clap 4.5.35",
  "clap_complete",
  "cosmrs",
