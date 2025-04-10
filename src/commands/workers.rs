@@ -120,14 +120,8 @@ async fn create_worker(
                 .labels(worker.metadata.labels.into_iter().map(Into::into).collect())
                 .cpus(worker.spec.cpus.millicores()?)
                 .gpus(worker.spec.gpus.millicores()?)
-                .memory(ByteSize::new(
-                    worker.spec.memory.bytes()?,
-                    ByteUnit::Byte,
-                ))
-                .disk(ByteSize::new(
-                    worker.spec.disk.bytes()?,
-                    ByteUnit::Byte,
-                ))
+                .memory(ByteSize::new(worker.spec.memory.bytes()?, ByteUnit::Byte))
+                .disk(ByteSize::new(worker.spec.disk.bytes()?, ByteUnit::Byte))
                 .into_message()?,
         )
         .await?;
