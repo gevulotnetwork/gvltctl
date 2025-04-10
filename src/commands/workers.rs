@@ -118,14 +118,14 @@ async fn create_worker(
                 .description(worker.metadata.description)
                 .tags(worker.metadata.tags.into_iter().collect())
                 .labels(worker.metadata.labels.into_iter().map(Into::into).collect())
-                .cpus(worker.spec.cpus.millicores()? as u64)
-                .gpus(worker.spec.gpus.millicores()? as u64)
+                .cpus(worker.spec.cpus.millicores()?)
+                .gpus(worker.spec.gpus.millicores()?)
                 .memory(ByteSize::new(
-                    worker.spec.memory.bytes()? as u64,
+                    worker.spec.memory.bytes()?,
                     ByteUnit::Byte,
                 ))
                 .disk(ByteSize::new(
-                    worker.spec.disk.bytes()? as u64,
+                    worker.spec.disk.bytes()?,
                     ByteUnit::Byte,
                 ))
                 .into_message()?,

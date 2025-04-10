@@ -8,7 +8,7 @@ repository = "https://github.com/gevulotnetwork/gvltctl"
 description = "Gevulot Control CLI"
 
 [dependencies]
-gevulot-rs = "0.3.0"
+gevulot-rs = "0.4.0"
 
 bip32 = "0.5.1"
 clap = { version = "4", features = ["derive", "env", "string"] }
@@ -64,5 +64,3 @@ openssl-vendored = ["openssl/vendored"]
 [dev-dependencies]
 minilsof = "0.1"
 
-[patch.crates-io]
-gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", branch = "main" }

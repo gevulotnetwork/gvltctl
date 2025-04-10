@@ -1266,8 +1266,9 @@ dependencies = [
 
 [[package]]
 name = "gevulot-rs"
-version = "0.3.0"
-source = "git+https://github.com/gevulotnetwork/gevulot-rs.git?branch=main#67cdf53009d4d2bfba815b81645f201830a66ee6"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04a5c1c12a6adff0a7f6eed03f5aa4e589a874efbbbcd9587428ca004a87d402"
 dependencies = [
  "backon",
  "bip32",
@@ -1364,7 +1365,7 @@ dependencies = [
  "fatfs",
  "fs_extra",
  "fscommon",
- "gevulot-rs 0.3.0",
+ "gevulot-rs 0.4.0",
  "hex",
  "libz-sys",
  "log",
