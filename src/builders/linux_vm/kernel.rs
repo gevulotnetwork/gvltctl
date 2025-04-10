@@ -310,7 +310,7 @@ impl Step<LinuxVMBuildContext> for Build {
             kernel
                 .kernel_release()
                 .expect("kernel is expected to be compiled from sources"),
-            ByteSize::b(kernel.size()).to_string_as(true)
+            ByteSize::b(kernel.size()).display()
         );
         ctx.set("kernel", Box::new(kernel));
         Ok(())
@@ -337,7 +337,7 @@ impl Step<LinuxVMBuildContext> for Precompiled {
         info!(
             "using precompiled Linux kernel: {} ({})",
             &kernel,
-            ByteSize::b(kernel.size()).to_string_as(true)
+            ByteSize::b(kernel.size()).display()
         );
         ctx.set("kernel", Box::new(kernel));
         Ok(())

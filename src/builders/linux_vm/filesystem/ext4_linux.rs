@@ -182,7 +182,7 @@ impl Step<LinuxVMBuildContext> for EvaluateSize {
         let size_bytes = Ext4::round_up(dir.size()?);
         trace!(
             "total data bytes: {} ({} blocks)",
-            bytesize::ByteSize::b(size_bytes).to_string_as(true),
+            bytesize::ByteSize::b(size_bytes).display(),
             size_bytes / Ext4::BLOCK_SIZE
         );
 
@@ -194,7 +194,7 @@ impl Step<LinuxVMBuildContext> for EvaluateSize {
 
         debug!(
             "size of partition for EXT4: {}",
-            bytesize::ByteSize::b(partition_size).to_string_as(true),
+            bytesize::ByteSize::b(partition_size).display(),
         );
 
         ctx.set("root-partition-size", Box::new(partition_size));

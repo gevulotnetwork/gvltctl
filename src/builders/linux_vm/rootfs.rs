@@ -61,7 +61,7 @@ impl Step<LinuxVMBuildContext> for CopyExisting {
         debug!(
             "root filesystem set: {} ({})",
             dest.path().display(),
-            ByteSize::b(dest.size()?).to_string_as(true),
+            ByteSize::b(dest.size()?).display(),
         );
         Ok(())
     }
