@@ -1,7 +1,6 @@
 use gevulot_rs::builders::{
     ByteSize, ByteUnit, MsgAnnounceWorkerExitBuilder, MsgCreateWorkerBuilder,
-    MsgUpdateWorkerBuilder,
-    MsgDeleteWorkerBuilder,
+    MsgDeleteWorkerBuilder, MsgUpdateWorkerBuilder,
 };
 use patharg::InputArg;
 use serde_json::Value;
