@@ -1,6 +1,6 @@
 use gevulot_rs::builders::{
     ByteSize, ByteUnit, MsgAnnounceWorkerExitBuilder, MsgCreateWorkerBuilder,
-    MsgDeleteWorkerBuilder,
+    MsgDeleteWorkerBuilder, MsgUpdateWorkerBuilder,
 };
 use patharg::InputArg;
 use serde_json::Value;
@@ -29,6 +29,9 @@ impl Command {
             }
             Subcommand::Delete { id } => delete_worker(&self.chain_args, id).await,
             Subcommand::AnnounceExit { id } => announce_worker_exit(&self.chain_args, id).await,
+            Subcommand::Update { file } => {
+                update_worker(&self.chain_args, file.path_ref().map(|v| &**v)).await
+            }
         }?;
         print_object(format, &value)
     }
@@ -63,6 +66,13 @@ enum Subcommand {
     AnnounceExit {
         /// The ID of the worker to announce exit.
         id: String,
+    },
+
+    /// Update a worker.
+    Update {
+        /// The file to read the worker data from or '-' to read from stdin.
+        #[arg(short, long, default_value_t)]
+        file: InputArg,
     },
 }
 
@@ -108,6 +118,46 @@ async fn create_worker(
                 .description(worker.metadata.description)
                 .tags(worker.metadata.tags.into_iter().collect())
                 .labels(worker.metadata.labels.into_iter().map(Into::into).collect())
+                .cpus(worker.spec.cpus.millicores()?)
+                .gpus(worker.spec.gpus.millicores()?)
+                .memory(ByteSize::new(worker.spec.memory.bytes()?, ByteUnit::Byte))
+                .disk(ByteSize::new(worker.spec.disk.bytes()?, ByteUnit::Byte))
+                .into_message()?,
+        )
+        .await?;
+
+    Ok(serde_json::json!({
+        "status": "success",
+        "message": "Worker created successfully",
+        "worker_id": resp.id
+    }))
+}
+
+/// Updates a worker with the specified ID.
+async fn update_worker(
+    chain_args: &ChainArgs,
+    path: Option<&Path>,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let worker: gevulot_rs::models::Worker = read_file(path).await?;
+    let mut client = connect_to_gevulot(chain_args).await?;
+    let me = client
+        .base_client
+        .write()
+        .await
+        .address
+        .clone()
+        .ok_or("No address found, did you set a mnemonic?")?;
+    let id = worker.metadata.id.ok_or("Worker ID not found")?;
+    client
+        .workers
+        .update(
+            MsgUpdateWorkerBuilder::default()
+                .creator(me)
+                .id(id.clone())
+                .name(worker.metadata.name)
+                .description(worker.metadata.description)
+                .tags(worker.metadata.tags.into_iter().collect())
+                .labels(worker.metadata.labels.into_iter().map(Into::into).collect())
                 .cpus(worker.spec.cpus.millicores()? as u64)
                 .gpus(worker.spec.gpus.millicores()? as u64)
                 .memory(ByteSize::new(
@@ -124,8 +174,8 @@ async fn create_worker(
 
     Ok(serde_json::json!({
         "status": "success",
-        "message": "Worker created successfully",
-        "worker_id": resp.id
+        "message": "Worker updated successfully",
+        "worker_id": id,
     }))
 }
 
