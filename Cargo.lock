@@ -1273,40 +1273,6 @@ dependencies = [
 
 [[package]]
 name = "gevulot-rs"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc328be91b31fbc8dd8c82b0d959f2a9c0349e35297f59d661436540597491f2"
-dependencies = [
- "backon",
- "bip32",
- "bytesize 1.3.3",
- "const_format",
- "cosmos-sdk-proto",
- "cosmrs",
- "derivative",
- "derive_builder",
- "hex",
- "http 1.3.1",
- "humantime",
- "log",
- "pretty_env_logger",
- "prost 0.13.5",
- "prost-build",
- "rand 0.8.5",
- "rand_core 0.6.4",
- "semver",
- "serde",
- "serde_json",
- "tendermint",
- "thiserror 1.0.69",
- "tokio",
- "tonic",
- "tonic-buf-build",
- "tonic-build",
-]
-
-[[package]]
-name = "gevulot-rs"
 version = "0.4.0"
 source = "git+https://github.com/gevulotnetwork/gevulot-rs.git?rev=ae02e25eef60e9b25c87aaf90eb5f0c246fa3eec#ae02e25eef60e9b25c87aaf90eb5f0c246fa3eec"
 dependencies = [
@@ -1405,7 +1371,7 @@ dependencies = [
  "fatfs",
  "fs_extra",
  "fscommon",
- "gevulot-rs 0.4.0",
+ "gevulot-rs",
  "hex",
  "libz-sys",
  "log",
@@ -2188,13 +2154,13 @@ checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 [[package]]
 name = "mia-installer"
 version = "0.3.0"
-source = "git+https://github.com/gevulotnetwork/mia.git?tag=mia-installer-0.3.0#537af9fd9823a061b1b9e07ceecb5827a57e1798"
+source = "git+https://github.com/gevulotnetwork/mia.git?rev=6232286f8c99a7e9966c69a948b936d994689cfb#6232286f8c99a7e9966c69a948b936d994689cfb"
 dependencies = [
  "anyhow",
  "env_logger 0.11.8",
  "flate2",
  "fs_extra",
- "gevulot-rs 0.2.0",
+ "gevulot-rs",
  "log",
  "octocrab",
  "reqwest 0.11.27",
