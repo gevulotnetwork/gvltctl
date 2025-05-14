@@ -68,6 +68,11 @@ impl Step<LinuxVMBuildContext> for InstallMia {
 
         let follow_config = if self.gevulot_runtime {
             // NOTE: Worker node will mount input and output contexts to these tags.
+            mounts.push(runtime_config::Mount::ext4(
+                "/dev/sdb".to_string(),
+                "/mnt/gevulot/input".to_string(),
+            ));
+
             /*
                         mounts.push(runtime_config::Mount::virtio9p(
                             "gevulot-input".to_string(),
