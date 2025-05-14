@@ -68,19 +68,21 @@ impl Step<LinuxVMBuildContext> for InstallMia {
 
         let follow_config = if self.gevulot_runtime {
             // NOTE: Worker node will mount input and output contexts to these tags.
-            mounts.push(runtime_config::Mount::virtio9p(
-                "gevulot-input".to_string(),
-                "/mnt/gevulot/input".to_string(),
-            ));
-            mounts.push(runtime_config::Mount::virtio9p(
-                "gevulot-output".to_string(),
-                "/mnt/gevulot/output".to_string(),
-            ));
+            /*
+                        mounts.push(runtime_config::Mount::virtio9p(
+                            "gevulot-input".to_string(),
+                            "/mnt/gevulot/input".to_string(),
+                        ));
+                        mounts.push(runtime_config::Mount::virtio9p(
+                            "gevulot-output".to_string(),
+                            "/mnt/gevulot/output".to_string(),
+                        ));
 
-            mounts.push(runtime_config::Mount::virtio9p(
-                "gevulot-rt-config".to_string(),
-                "/mnt/gevulot/rt-config".to_string(),
-            ));
+                        mounts.push(runtime_config::Mount::virtio9p(
+                            "gevulot-rt-config".to_string(),
+                            "/mnt/gevulot/rt-config".to_string(),
+                        ));
+            */
             // NOTE: Worker node will mount runtime config file to tag `gevulot-rt-config`.
             //       This is a convention between VM and node we have now.
             Some("/mnt/gevulot/rt-config/config.yaml".to_string())
