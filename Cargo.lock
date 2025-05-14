@@ -2154,7 +2154,7 @@ checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 [[package]]
 name = "mia-installer"
 version = "0.3.0"
-source = "git+https://github.com/gevulotnetwork/mia.git?rev=6232286f8c99a7e9966c69a948b936d994689cfb#6232286f8c99a7e9966c69a948b936d994689cfb"
+source = "git+https://github.com/gevulotnetwork/mia.git?rev=9460a91633ac3fd6c5ce6d76f4dcaebb62b8a976#9460a91633ac3fd6c5ce6d76f4dcaebb62b8a976"
 dependencies = [
  "anyhow",
  "env_logger 0.11.8",
