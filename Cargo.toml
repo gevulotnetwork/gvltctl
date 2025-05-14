@@ -8,7 +8,7 @@ repository = "https://github.com/gevulotnetwork/gvltctl"
 description = "Gevulot Control CLI"
 
 [dependencies]
-gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", branch = "test-ext4" }
+gevulot-rs = { git = "https://github.com/gevulotnetwork/gevulot-rs.git", rev = "ae02e25eef60e9b25c87aaf90eb5f0c246fa3eec" }
 
 bip32 = "0.5.1"
 clap = { version = "4", features = ["derive", "env", "string"] }

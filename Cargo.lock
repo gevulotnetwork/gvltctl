@@ -1308,7 +1308,7 @@ dependencies = [
 [[package]]
 name = "gevulot-rs"
 version = "0.4.0"
-source = "git+https://github.com/gevulotnetwork/gevulot-rs.git?branch=test-ext4#ae02e25eef60e9b25c87aaf90eb5f0c246fa3eec"
+source = "git+https://github.com/gevulotnetwork/gevulot-rs.git?rev=ae02e25eef60e9b25c87aaf90eb5f0c246fa3eec#ae02e25eef60e9b25c87aaf90eb5f0c246fa3eec"
 dependencies = [
  "backon",
  "bip32",
