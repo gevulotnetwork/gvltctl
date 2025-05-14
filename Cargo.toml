@@ -29,7 +29,7 @@ openssl = { version = "*", optional = true }
 which = "7"
 
 # Linux VM builder dependencies
-mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", rev = "9460a91633ac3fd6c5ce6d76f4dcaebb62b8a976" }
+mia-installer = { git = "https://github.com/gevulotnetwork/mia.git", rev = "8e14673a5305eb0f63193f50c891de9d6e68d259" }
 
 anyhow = "1"
 backhand = { version = "0.20", default-features = false, features = ["xz"] }
