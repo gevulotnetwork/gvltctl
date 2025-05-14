@@ -70,7 +70,7 @@ impl Step<LinuxVMBuildContext> for InstallMia {
             // NOTE: Worker node will mount input and output contexts to these tags.
             mounts.push(runtime_config::Mount::ext4(
                 "/dev/sdb".to_string(),
-                "/mnt/gevulot/input".to_string(),
+                "/mnt/gevulot".to_string(),
             ));
 
             /*
